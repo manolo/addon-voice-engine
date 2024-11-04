@@ -11,11 +11,11 @@ import com.vaadin.flow.component.ComponentEventListener;
 import com.vaadin.flow.component.Synchronize;
 import com.vaadin.flow.component.Tag;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.select.Select;
-import com.vaadin.flow.component.select.SelectVariant;
 import com.vaadin.flow.shared.Registration;
 
 import elemental.json.JsonArray;
@@ -49,9 +49,10 @@ public class VoiceEngine extends Div {
     for (Buttons button : buttons) {
       switch (button) {
         case RECORD:
-          Button startButton = new Button(VaadinIcon.CIRCLE.create());
-          startButton.addClickListener(e -> start());
-          add(startButton);
+          Button recButton = new Button(VaadinIcon.CIRCLE.create());
+          recButton.addClickListener(e -> start());
+          recButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
+          add(recButton);
           break;
         case PLAY:
           Button playButton = new Button(VaadinIcon.PLAY.create());
@@ -61,6 +62,7 @@ public class VoiceEngine extends Div {
         case MICROPHONE:
           Button micButton = new Button(VaadinIcon.MICROPHONE.create());
           micButton.addClickListener(e -> start());
+          micButton.addThemeVariants(ButtonVariant.LUMO_ERROR);
           add(micButton);
           break;
         case STOP:

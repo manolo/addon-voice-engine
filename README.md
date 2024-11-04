@@ -1,7 +1,6 @@
 # Voice Addon
 
-An addon for both: voice recognition and speach text
-
+An addon for voice recognition and speach text
 
 ## Example
 

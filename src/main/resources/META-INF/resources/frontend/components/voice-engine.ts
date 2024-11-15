@@ -1,8 +1,9 @@
 import { LitElement, css, html } from 'lit';
 import { customElement, property } from 'lit/decorators.js';
 
-// es-ES, en-AU, en-US, en-GB
-const preferVoicePattern = /M.nica|Catherine|Samantha|Daniel/;
+// voices with parentesis sounds as very synthetic voice
+const preferVoicePattern = /^[^\(]+$/;
+// if connection is not good enough use localvoices
 
 @customElement('voice-engine')
 export class SpeechConverter extends LitElement {
@@ -55,13 +56,13 @@ export class SpeechConverter extends LitElement {
     this.recognition =
       SpeechRecognition !== undefined
         ? new SpeechRecognition()
-        : console.error('Your browser does not support the Web SpeechRecognition API');
+        : console.error('voice-engine: Your browser does not support the Web SpeechRecognition API');
 
     const speechSynthesis = $wnd.speechSynthesis;
     this.syntesis =
       speechSynthesis !== undefined
         ? speechSynthesis
-        : console.error('Your browser does not support the Web SpeechSynthesis API');
+        : console.error('voice-engine: Your browser does not support the Web SpeechSynthesis API');
   }
 
   async connectedCallback() {
@@ -75,10 +76,10 @@ export class SpeechConverter extends LitElement {
       const id = setTimeout(() => {
         if (cont++ > 100) {
           clearTimeout(id);
-          console.error('Voices not loaded');
+          console.error('voice-engine: Voices not loaded');
           resolve(null);
         }
-        this.speechVoices = this.syntesis.getVoices().sort((a:any, b:any) => 
+        this.speechVoices = this.syntesis.getVoices().sort((a:any, b:any) =>
           preferVoicePattern.test(a.name) !== preferVoicePattern.test(b.name) ? Number(preferVoicePattern.test(b.name)) - Number(preferVoicePattern.test(a.name)) :
           a.name.localeCompare(b.name) );
         if (this.speechVoices.length > 0) {
@@ -86,7 +87,7 @@ export class SpeechConverter extends LitElement {
           clearTimeout(id);
           resolve(null)
         } else {
-          console.debug('waiting for voices to be loaded...');
+          console.debug('voice-engine: waiting for voices to be loaded...');
         }
       }, 1);
     });
@@ -105,7 +106,9 @@ export class SpeechConverter extends LitElement {
   }
 
   initializeAttributes() {
-    this.speech = this.getAttribute('speech') || '';
+    if (this.hasAttribute('speech')) {
+      this.speech = this.getAttribute('speech') || '';
+    }
     if (this.hasAttribute('continuous')) {
       this.continuous = true;
     }
@@ -124,13 +127,13 @@ export class SpeechConverter extends LitElement {
 
   initializeEventListeners() {
     if (!this.recognition) {
-      console.error('Recognition not initialized');
+      console.error('voice-engine: Recognition not initialized');
       return;
     }
 
     ['start', 'end', 'error', 'result', 'speechResult'].forEach((eventName) =>
       this.recognition.addEventListener(eventName, (e: any) => {
-        console.debug(`Event: ${eventName}`, e);
+        console.debug(`voice-engine: Event -> ${eventName}`, e);
         if (eventName === 'end') {
           if (!this.isRecording) {
             return;
@@ -163,26 +166,56 @@ export class SpeechConverter extends LitElement {
   stopRecording() {
     this.recognition.stop();
     this.isRecording = false;
+    this.syntesis.pause();
   }
 
-  playSpeech() {
+  async playSpeech() {
     this.cancel();
     if (!this.speechVoice) {
       this.onLangChanged();
     }
-    var speaker = new SpeechSynthesisUtterance(this.speech);
-    speaker.lang = this.lang;
-    speaker.voice = this.speechVoice;
-    // See https://stackoverflow.com/a/57672147/280410
-    this.syntTimer = setInterval(() => {
-      if (!this.syntesis.speaking) {
-        clearInterval(this.syntTimer);
-      } else {
-        this.syntesis.pause();
-        this.syntesis.resume();
+    if (this.speech) {
+      console.debug(`voice-engine: Speaking ${this.voice}: ${this.speech}`);
+      await this._speak(this.speech);
+      return;
+    }
+  }
+
+  async _hear() {
+    return new Promise((resolve, reject) => {
+      this.recognition.start();
+      this.recognition.onresult = e => {
+          var current = e.resultIndex;
+          var transcript = e.results[current][0].transcript;
+          console.log(transcript);
+          this.recognition.stop();
+          resolve(transcript);
       }
-    }, 14000);
-    this.syntesis.speak(speaker);
+    });
+  }
+
+  async _speak(text: string) {
+    // enclose in a promise to be able to await
+    return new Promise((resolve) => {
+      const speaker = new SpeechSynthesisUtterance(text);
+      speaker.lang = this.lang;
+      speaker.voice = this.speechVoice;
+        // See https://stackoverflow.com/a/57672147/280410
+      this.syntTimer = setInterval(() => {
+        if (!this.syntesis.speaking) {
+          clearInterval(this.syntTimer);
+          resolve(null);
+        } else {
+          this.syntesis.pause();
+          this.syntesis.resume();
+        }
+      }, 140000);
+      this.syntesis.speak(speaker);
+      speaker.onend = () => {
+        resolve(null);
+        clearInterval(this.syntTimer);
+      };
+    });
   }
 
   onLangChanged() {
@@ -211,13 +244,13 @@ export class SpeechConverter extends LitElement {
     }
 
     if (!this.speechVoice) {
-      console.error(`Unable to select an appropriate voice for language=${this.lang}`);
+      console.error(`voice-engine: Unable to select an appropriate voice for language=${this.lang}`);
     } else {
       this.changingLang = true;
       this.voice = this.speechVoice.name;
       this.changingLang = false;
       this.dispatchEvent(new CustomEvent('voice-changed'));
-      console.log(`Selected voice: ${this.voice} for language=${this.lang}`);
+      console.log(`voice-engine: Selected voice: ${this.voice} for language=${this.lang}`);
     }
   }
 

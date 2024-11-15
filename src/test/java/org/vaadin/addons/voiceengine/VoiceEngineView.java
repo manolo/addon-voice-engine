@@ -1,6 +1,6 @@
 package org.vaadin.addons.voiceengine;
 
-import static org.vaadin.voiceengine.VoiceEngine.Buttons.LANG;
+import static org.vaadin.voiceengine.VoiceEngine.Buttons.*;
 import static org.vaadin.voiceengine.VoiceEngine.Buttons.MICROPHONE;
 import static org.vaadin.voiceengine.VoiceEngine.Buttons.PLAY;
 import static org.vaadin.voiceengine.VoiceEngine.Buttons.VOICE;
@@ -23,7 +23,7 @@ public class VoiceEngineView extends Div {
         // Create the Voice Engine component, enabling the mic for recording
         // play button for playing the text in the TextArea, language and voice
         // selection
-        VoiceEngine voiceEngine = new VoiceEngine().setButtons(MICROPHONE, PLAY, LANG, VOICE);
+        VoiceEngine voiceEngine = new VoiceEngine().setButtons(MICROPHONE, RECORD, PLAY, STOP, LANG, VOICE);
         // Additional Button added to the VoiceEngine for clearing the TextArea
         Button clearButton = new Button(LumoIcon.CROSS.create());
         voiceEngine.add(clearButton);
@@ -32,7 +32,6 @@ public class VoiceEngineView extends Div {
         textArea.setSizeFull();
         // Add the components to the view
         add(new VerticalLayout(voiceEngine, textArea));
-
         // Configure listeners
         clearButton.addClickListener(e -> textArea.clear());
         voiceEngine.addStartListener(e -> textArea.clear());

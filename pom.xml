@@ -6,7 +6,7 @@
 
     <groupId>org.vaadin.addons.manolo</groupId>
     <artifactId>voice-engine</artifactId>
-    <version>1.0.2</version>
+    <version>1.0.3</version>
     <name>Voice Engine Add-on for Vaadin</name>
 
     <properties>
@@ -118,7 +118,7 @@
                     <excludes>
                         <exclude>META-INF/VAADIN/config/flow-build-info.json</exclude>
                     </excludes>
-                </configuration>                     
+                </configuration>
             </plugin>
 
             <plugin>

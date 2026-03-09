@@ -18,7 +18,7 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.shared.Registration;
 
-import elemental.json.JsonArray;
+import tools.jackson.databind.node.ArrayNode;
 
 /**
  * VoiceEngine is a Vaadin wrapper component for the Web Recognition and
@@ -77,7 +77,7 @@ public class VoiceEngine extends Div {
           break;
         case LANG:
           Select<String> langSelect = new Select<>();
-          langSelect.setOverlayClassName("voice-engine-language-overlay");
+          langSelect.addClassName("voice-engine-language-overlay");
           langSelect.setWidth("6em");
           add(langSelect);
           this.addVoiceChangedListener(e -> {
@@ -106,7 +106,7 @@ public class VoiceEngine extends Div {
           break;
         case VOICE:
           voiceSelect = new Select<>();
-          voiceSelect.setOverlayClassName("voice-engine-voice-overlay");
+          voiceSelect.addClassName("voice-engine-voice-overlay");
           add(voiceSelect);
           voiceSelect.addValueChangeListener(e -> {
             if (e.getValue() != null) {
@@ -187,11 +187,11 @@ public class VoiceEngine extends Div {
   @Synchronize("voice-changed")
   public Map<String, List<String>> getVoices() {
     Map<String, List<String>> voices = new HashMap<>();
-    JsonArray a = (JsonArray) getElement().getPropertyRaw("voices");
-    for (int i = 0; a != null && i < a.length(); i++) {
-      String lang = a.getObject(i).getString("lang");
+    ArrayNode a = (ArrayNode) getElement().getPropertyRaw("voices");
+    for (int i = 0; a != null && i < a.size(); i++) {
+      String lang = a.get(i).get("lang").asText();
       voices.putIfAbsent(lang, new ArrayList<>());
-      voices.get(lang).add(a.getObject(i).getString("name"));
+      voices.get(lang).add(a.get(i).get("name").asText());
     }
     return voices;
   }

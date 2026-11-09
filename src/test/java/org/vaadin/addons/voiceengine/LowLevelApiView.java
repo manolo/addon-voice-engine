@@ -2,6 +2,8 @@ package org.vaadin.addons.voiceengine;
 
 import java.util.Locale;
 
+import org.vaadin.voiceengine.OnDeviceAvailability;
+import org.vaadin.voiceengine.RecognitionEngine;
 import org.vaadin.voiceengine.RecognitionOptions;
 import org.vaadin.voiceengine.SpeechRecognition;
 import org.vaadin.voiceengine.SpeechSynthesis;
@@ -21,6 +23,7 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
+import com.vaadin.flow.component.select.Select;
 import com.vaadin.flow.component.textfield.TextArea;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.PreserveOnRefresh;
@@ -53,6 +56,10 @@ public class LowLevelApiView extends VerticalLayout {
     private final VoiceSelect voiceSelect = new VoiceSelect();
     private final Checkbox continuous = new Checkbox("Continuous");
     private final Checkbox interim = new Checkbox("Interim results", true);
+    private final Select<RecognitionEngine> engine = new Select<>("Engine", e -> {
+    }, RecognitionEngine.values()) {{
+        setValue(RecognitionEngine.ANY);
+    }};
 
     private final ActionButton recordButton = new ActionButton("Record", VaadinIcon.MICROPHONE,
             "Start speech recognition", this::record) {{
@@ -66,15 +73,17 @@ public class LowLevelApiView extends VerticalLayout {
             "Speak the text with the selected language and voice", this::speak);
     private final ActionButton listenOnceButton = new ActionButton("Listen once", VaadinIcon.COMMENT,
             "SpeechRecognition.listenOnce: recognize a single phrase", this::listenOnce);
+    private final ActionButton onDeviceButton = new ActionButton("On-device?", VaadinIcon.LAPTOP,
+            "Check whether the language can be recognized on this device", this::checkOnDevice);
 
     public LowLevelApiView() {
         add(new Paragraph("SpeechRecognition and SpeechSynthesis used directly. "
                 + "Button states follow the listeners, the log shows the raw events."));
-        add(new HorizontalLayout(languageSelect, voiceSelect, continuous, interim) {{
+        add(new HorizontalLayout(languageSelect, voiceSelect, engine, continuous, interim) {{
             setWrap(true);
             setAlignItems(FlexComponent.Alignment.BASELINE);
         }});
-        add(new HorizontalLayout(recordButton, stopButton, abortButton, speakButton, listenOnceButton,
+        add(new HorizontalLayout(recordButton, stopButton, abortButton, speakButton, listenOnceButton, onDeviceButton,
                 new ActionButton("Clear", VaadinIcon.CLOSE_SMALL, "Clear text and log", () -> {
                     text.clear();
                     log.setText("");
@@ -95,6 +104,11 @@ public class LowLevelApiView extends VerticalLayout {
             text.setValue(join(recognition.getTranscript(), recognition.getInterimTranscript()));
         });
         recognition.addErrorListener(error -> log("recognition error: " + error));
+        recognition.addPhaseListener(phase -> log("recognition phase: " + phase));
+        // Used in browsers without speech recognition (Firefox). A real
+        // application would call a transcription service here.
+        recognition.setServerFallback((audio, contentType) -> "server fallback received "
+                + audio.readAllBytes().length + " bytes of " + contentType);
         recognition.addEndListener(transcript -> {
             log("recognition end: \"" + transcript + "\"");
             text.setValue(transcript);
@@ -120,6 +134,7 @@ public class LowLevelApiView extends VerticalLayout {
                 .lang(languageSelect.getValue())
                 .continuous(continuous.getValue())
                 .interimResults(interim.getValue())
+                .engine(engine.getValue())
                 .build());
         recognition.start();
     }
@@ -149,6 +164,16 @@ public class LowLevelApiView extends VerticalLayout {
                     text.setValue(phrase);
                 },
                 error -> log("listenOnce error: " + error));
+    }
+
+    private void checkOnDevice() {
+        Locale lang = languageSelect.getValue();
+        SpeechRecognition.checkOnDeviceAvailability(lang, availability -> {
+            log("on-device availability for " + lang + ": " + availability);
+            if (availability == OnDeviceAvailability.DOWNLOADABLE) {
+                SpeechRecognition.installOnDevice(lang, ok -> log("on-device install for " + lang + ": " + ok));
+            }
+        });
     }
 
     private void updateState() {

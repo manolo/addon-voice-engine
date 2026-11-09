@@ -33,6 +33,10 @@ public enum SynthesisErrorCode {
         this.jsCode = jsCode;
     }
 
+    String jsCode() {
+        return jsCode;
+    }
+
     static SynthesisErrorCode fromJs(String code) {
         for (SynthesisErrorCode c : values()) {
             if (c.jsCode.equals(code)) {

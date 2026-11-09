@@ -1,5 +1,6 @@
 package org.vaadin.voiceengine.ui;
 
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Collectors;
@@ -8,7 +9,11 @@ import java.util.stream.Stream;
 import org.vaadin.voiceengine.RecognitionErrorCode;
 import org.vaadin.voiceengine.RecognitionOptions;
 import org.vaadin.voiceengine.SpeechRecognition;
+import org.vaadin.voiceengine.SpeechSupport;
+import org.vaadin.voiceengine.TriggerMode;
 
+import com.vaadin.flow.component.AttachEvent;
+import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasValue;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
@@ -16,33 +21,42 @@ import com.vaadin.flow.component.icon.VaadinIcon;
 
 /**
  * A button that dictates text into a field using speech recognition. Click to
- * start, click again to stop. The field is updated live while speaking.
+ * start, click again to stop, Escape to cancel. The field is updated in the
+ * browser while the user speaks, and the final text is set to it on the
+ * server when dictation ends.
  *
  * <pre>{@code
  * TextArea notes = new TextArea("Notes");
  * add(notes, new DictationButton(notes));
  * }</pre>
  * <p>
- * For more control, use {@link #getRecognition()} or {@link SpeechRecognition}
- * directly.
+ * The browser starts listening directly when the button is pressed, without a
+ * server round trip. With {@link #setTriggerMode(TriggerMode) TriggerMode.HOLD},
+ * it works as push-to-talk. For more control, use {@link #getRecognition()},
+ * e.g. for a {@link SpeechRecognition#setServerFallback server fallback}.
  */
 public class DictationButton extends Button {
 
     private final HasValue<?, String> target;
     private final SpeechRecognition recognition;
+    private TriggerMode triggerMode = TriggerMode.TOGGLE;
     private boolean append = true;
+    private boolean iconOnly;
+    private List<ButtonVariant> activeVariants = List.of(ButtonVariant.ERROR);
     private String idleText = "Dictate";
     private String activeText = "Stop dictation";
     private String textBefore = "";
 
     /**
-     * Creates a dictation button that keeps listening until stopped and shows
-     * interim results in the field.
+     * Creates a dictation button that keeps listening until stopped, shows
+     * the text in the field while the user speaks, and stops speech synthesis
+     * when dictation starts.
      *
      * @param target the field to write the recognized text to
      */
     public DictationButton(HasValue<?, String> target) {
-        this(target, RecognitionOptions.builder().continuous(true).interimResults(true).build());
+        this(target, RecognitionOptions.builder().continuous(true).interimResults(true).cancelSpeechOnStart(true)
+                .build());
     }
 
     /**
@@ -54,27 +68,43 @@ public class DictationButton extends Button {
     public DictationButton(HasValue<?, String> target, RecognitionOptions options) {
         this.target = Objects.requireNonNull(target, "target must not be null");
         recognition = SpeechRecognition.create(this, options);
-        recognition.addResultListener(result -> updateTarget());
-        recognition.addEndListener(transcript -> updateTarget());
+        if (target instanceof Component) {
+            // Updated in the browser, only final results go to the server
+            recognition.setLiveTarget(target, append);
+            recognition.setInterimResultsToServer(false);
+        } else {
+            recognition.addActiveChangeListener(active -> {
+                if (active) {
+                    String current = target.getValue();
+                    textBefore = append && current != null ? current : "";
+                }
+            });
+            recognition.addResultListener(result -> updateTarget());
+            recognition.addEndListener(transcript -> updateTarget());
+        }
         recognition.addActiveChangeListener(active -> updateLook());
         recognition.addErrorListener(error -> {
             if (error.code() == RecognitionErrorCode.RECOGNITION_UNAVAILABLE) {
-                setEnabled(false);
-                setTooltipText("Speech recognition is not supported by this browser");
+                markUnsupported();
             }
         });
-        addClickListener(e -> toggle());
+        recognition.bindTrigger(this, triggerMode);
         updateLook();
     }
 
-    private void toggle() {
-        if (recognition.isActive()) {
-            recognition.stop();
-        } else {
-            String current = target.getValue();
-            textBefore = append && current != null ? current : "";
-            recognition.start();
-        }
+    @Override
+    protected void onAttach(AttachEvent attachEvent) {
+        super.onAttach(attachEvent);
+        SpeechRecognition.whenSupportKnown(attachEvent.getUI(), support -> {
+            if (support == SpeechSupport.UNSUPPORTED && recognition.getServerFallback() == null) {
+                markUnsupported();
+            }
+        });
+    }
+
+    private void markUnsupported() {
+        setEnabled(false);
+        setTooltipText("Speech recognition is not supported by this browser");
     }
 
     private void updateTarget() {
@@ -86,14 +116,26 @@ public class DictationButton extends Button {
 
     private void updateLook() {
         boolean active = recognition.isActive();
-        setText(active ? activeText : idleText);
-        setIcon((active ? VaadinIcon.STOP : VaadinIcon.MICROPHONE).create());
-        if (active) {
-            addThemeVariants(ButtonVariant.ERROR);
+        String text = active ? activeText : idleText;
+        if (iconOnly) {
+            setText(null);
+            setAriaLabel(text);
         } else {
-            removeThemeVariants(ButtonVariant.ERROR);
+            setText(text);
+            setAriaLabel(null);
         }
-        setTooltipText(active ? "Stop listening" : "Dictate text using your microphone");
+        setIcon((active ? VaadinIcon.STOP : VaadinIcon.MICROPHONE).create());
+        activeVariants.forEach(variant -> {
+            if (active) {
+                addThemeVariants(variant);
+            } else {
+                removeThemeVariants(variant);
+            }
+        });
+        if (isEnabled()) {
+            setTooltipText(active ? "Stop listening, Escape to cancel"
+                    : triggerMode == TriggerMode.HOLD ? "Hold down and speak" : "Dictate text using your microphone");
+        }
     }
 
     /**
@@ -110,10 +152,51 @@ public class DictationButton extends Button {
      */
     public void setAppend(boolean append) {
         this.append = append;
+        if (target instanceof Component) {
+            recognition.setLiveTarget(target, append);
+        }
     }
 
     /**
-     * Sets the button texts.
+     * @param triggerMode {@link TriggerMode#TOGGLE} (default) to start and
+     *                    stop with clicks, {@link TriggerMode#HOLD} for
+     *                    push-to-talk
+     */
+    public void setTriggerMode(TriggerMode triggerMode) {
+        this.triggerMode = Objects.requireNonNull(triggerMode, "triggerMode must not be null");
+        recognition.bindTrigger(this, triggerMode);
+        updateLook();
+    }
+
+    /**
+     * Shows only the icon, e.g. for a button in a field's suffix. The texts
+     * are still used as the accessible name.
+     *
+     * @param iconOnly {@code true} to hide the text
+     */
+    public void setIconOnly(boolean iconOnly) {
+        this.iconOnly = iconOnly;
+        updateLook();
+    }
+
+    /**
+     * Sets the theme variants used while listening, by default
+     * {@link ButtonVariant#ERROR}. Call without arguments to keep the button's
+     * own look while listening.
+     *
+     * @param variants the variants
+     */
+    public void setActiveVariants(ButtonVariant... variants) {
+        if (recognition.isActive()) {
+            activeVariants.forEach(this::removeThemeVariants);
+        }
+        activeVariants = List.of(variants);
+        updateLook();
+    }
+
+    /**
+     * Sets the button texts. With {@link #setIconOnly(boolean)} they are the
+     * accessible name.
      *
      * @param idleText   text when not listening, default "Dictate"
      * @param activeText text when listening, default "Stop dictation"

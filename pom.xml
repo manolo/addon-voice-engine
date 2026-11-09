@@ -89,6 +89,13 @@
             <scope>test</scope>
         </dependency>
         <dependency>
+            <!-- Provided by the servlet container (jetty:run), needed by unit tests creating a UI -->
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <version>6.1.0</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>

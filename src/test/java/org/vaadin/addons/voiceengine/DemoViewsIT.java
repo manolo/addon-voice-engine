@@ -33,6 +33,43 @@ class DemoViewsIT {
 
     private static final String BASE = "http://localhost:8080/";
 
+    /**
+     * A scripted SpeechRecognition (driven with window.fakeRecognition.say)
+     * and a speechSynthesis that records what is spoken in window.spoken.
+     */
+    private static final String FAKE_SPEECH = """
+            (() => {
+              class FakeRecognition {
+                constructor() { this.list = []; }
+                start() {
+                  window.fakeRecognition = this;
+                  setTimeout(() => { this.onstart && this.onstart(); this.onaudiostart && this.onaudiostart(); });
+                }
+                say(text, isFinal) {
+                  const last = this.list[this.list.length - 1];
+                  const index = last && !last.isFinal ? this.list.length - 1 : this.list.length;
+                  this.list[index] = Object.assign([{ transcript: text, confidence: 0.9 }], { isFinal });
+                  this.onresult({ resultIndex: index, results: this.list });
+                }
+                stop() { setTimeout(() => this.onend()); }
+                abort() { setTimeout(() => { this.onerror({ error: 'aborted', message: '' }); this.onend(); }); }
+              }
+              window.SpeechRecognition = FakeRecognition;
+              window.webkitSpeechRecognition = FakeRecognition;
+              window.spoken = [];
+              speechSynthesis.speak = (u) => {
+                window.spoken.push(u.text);
+                setTimeout(() => { u.onstart && u.onstart(); u.onend && u.onend(); });
+              };
+            })();
+            """;
+
+    /** Removes speech recognition, like in Firefox. */
+    private static final String NO_RECOGNITION = """
+            delete window.SpeechRecognition;
+            delete window.webkitSpeechRecognition;
+            """;
+
     private static Playwright playwright;
     private static Browser browser;
     private Page page;
@@ -153,6 +190,119 @@ class DemoViewsIT {
         stop.click();
         // The end event from the browser must get through although the UI is inert
         assertThat(dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Dictate"))).isVisible();
+    }
+
+    private void say(String text, boolean isFinal) {
+        page.waitForFunction("() => !!window.fakeRecognition");
+        page.evaluate("([t, f]) => window.fakeRecognition.say(t, f)", List.of(text, isFinal));
+    }
+
+    private Locator textArea() {
+        return page.locator("vaadin-text-area").first();
+    }
+
+    @Test
+    void dictation_textAppearsLiveAndReachesServer() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        textArea().locator("textarea").fill("Before");
+        textArea().locator("textarea").blur();
+        button("Dictate").click();
+        assertThat(button("Stop dictation")).isVisible();
+
+        say("hello wor", false);
+        assertThat(textArea().locator("textarea")).hasValue("Before hello wor");
+        say("hello world", true);
+        say("again", false);
+        assertThat(textArea().locator("textarea")).hasValue("Before hello world again");
+
+        button("Stop dictation").click();
+        assertThat(button("Dictate")).isVisible();
+        // The interim "again" is dropped, the final text is the server's value
+        assertThat(textArea().locator("textarea")).hasValue("Before hello world");
+        button("Read aloud").click();
+        page.waitForFunction("() => window.spoken.includes('Before hello world')");
+    }
+
+    @Test
+    void dictation_escapeRestoresField() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        textArea().locator("textarea").fill("Keep me");
+        textArea().locator("textarea").blur();
+        button("Dictate").click();
+        say("discard this", true);
+        assertThat(textArea().locator("textarea")).hasValue("Keep me discard this");
+
+        page.keyboard().press("Escape");
+        assertThat(button("Dictate")).isVisible();
+        assertThat(textArea().locator("textarea")).hasValue("Keep me");
+        button("Read aloud").click();
+        page.waitForFunction("() => window.spoken.includes('Keep me')");
+    }
+
+    @Test
+    void dictation_pushToTalk() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator field = page.locator("vaadin-text-field");
+        Locator mic = field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Hold to dictate"));
+        mic.hover();
+        page.mouse().down();
+        say("pushed", true);
+        assertThat(field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Listening")))
+                .isVisible();
+        page.mouse().up();
+        assertThat(mic).isVisible();
+        assertThat(field.locator("input")).hasValue("pushed");
+    }
+
+    @Test
+    void lowLevelApi_phasesAndInterimResults() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE + "low-level");
+        assertThat(log()).containsText("support:");
+        button("Record").click();
+        assertThat(log()).containsText("recognition phase: AUDIO_START");
+        say("one", false);
+        assertThat(log()).containsText("result #0 interim: one");
+        say("one two", true);
+        assertThat(log()).containsText("result #0 final: one two");
+        button("Stop").click();
+        assertThat(log()).containsText("recognition end: \"one two\"");
+    }
+
+    @Test
+    void lowLevelApi_serverFallbackWithoutRecognition() {
+        page.addInitScript(NO_RECOGNITION);
+        page.navigate(BASE + "low-level");
+        assertThat(log()).containsText("recognition=UNSUPPORTED");
+        button("Record").click();
+        assertThat(log()).containsText("recognition active: true");
+        page.waitForTimeout(1500);
+        button("Stop").click();
+        assertThat(log()).containsText(Pattern.compile("result #0 final: server fallback received \\d+ bytes of audio/"));
+        assertThat(log()).containsText("recognition end");
+    }
+
+    @Test
+    void lowLevelApi_onDeviceCheckDoesNotCrashAutomatedBrowser() {
+        // available() crashes the tab in Playwright's Chromium, so the add-on
+        // reports UNAVAILABLE in automated browsers without calling it
+        page.navigate(BASE + "low-level");
+        assertThat(log()).containsText("support:");
+        button("On-device?").click();
+        assertThat(log()).containsText("on-device availability for null: UNAVAILABLE");
+        engineSelect("PREFER_ON_DEVICE");
+        button("Record").click();
+        assertThat(log()).containsText("recognition active: true");
+        button("Stop").click();
+        assertThat(log()).containsText("recognition end");
+    }
+
+    private void engineSelect(String value) {
+        page.locator("vaadin-select").filter(new Locator.FilterOptions().setHasText("Engine")).click();
+        page.getByRole(AriaRole.OPTION, new Page.GetByRoleOptions().setName(value)).click();
     }
 
     @Test

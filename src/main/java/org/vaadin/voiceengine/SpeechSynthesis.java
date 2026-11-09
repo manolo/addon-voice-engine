@@ -203,6 +203,41 @@ public final class SpeechSynthesis implements Serializable {
         return SpeechClient.get(ui).synthesisSupport();
     }
 
+    /**
+     * Calls the callback once the browser has reported whether it supports
+     * speech synthesis, immediately if already known.
+     *
+     * @param ui       the UI
+     * @param callback receives {@link SpeechSupport#SUPPORTED} or
+     *                 {@link SpeechSupport#UNSUPPORTED}
+     */
+    public static void whenSupportKnown(UI ui, SerializableConsumer<SpeechSupport> callback) {
+        Objects.requireNonNull(callback, "callback must not be null");
+        SpeechClient client = SpeechClient.get(ui);
+        client.whenSupportKnown(() -> callback.accept(client.synthesisSupport()));
+    }
+
+    /**
+     * Allows speaking later, outside user interaction, in browsers that
+     * require speech to be started from a user gesture first (iOS Safari).
+     * The first click, tap or key press on the component speaks a silent,
+     * empty utterance in the browser, without a server round trip.
+     * <p>
+     * Use it on the button that starts something that is read aloud when it
+     * completes, e.g. a question to an AI agent.
+     *
+     * @param component the component whose first activation unlocks speech
+     * @return a registration for removing the priming before it happens
+     */
+    public static Registration prime(Component component) {
+        Objects.requireNonNull(component, "component must not be null");
+        return new OwnerBinding(component, ui -> {
+            SpeechClient client = SpeechClient.get(ui);
+            client.call("m.prime($0)", component.getElement());
+            return () -> client.call("m.unprime($0)", component.getElement());
+        });
+    }
+
     private static SynthesisTracker tracker(UI ui) {
         return SpeechClient.get(ui).synthesis;
     }

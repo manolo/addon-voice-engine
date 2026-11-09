@@ -17,8 +17,8 @@ import tools.jackson.databind.JsonNode;
  */
 final class SynthesisTracker implements Serializable {
 
-    private record Pending(SerializableRunnable onEnd, SerializableConsumer<SynthesisError> onError,
-            Registration registration) implements Serializable {
+    private record Pending(Utterance utterance, SerializableRunnable onEnd,
+            SerializableConsumer<SynthesisError> onError, Registration registration) implements Serializable {
     }
 
     private final SpeechClient client;
@@ -38,7 +38,7 @@ final class SynthesisTracker implements Serializable {
     void speak(Utterance utterance, SerializableRunnable onEnd, SerializableConsumer<SynthesisError> onError) {
         String id = SpeechClient.newId();
         Registration registration = client.onSynthesisEvent(id, json -> handle(id, json));
-        pending.put(id, new Pending(onEnd, onError, registration));
+        pending.put(id, new Pending(utterance, onEnd, onError, registration));
         client.call("m.speak(this, $0, $1, $2)", id, utterance.text(), utterance.toJson())
                 .then(ok -> {
                 }, failure -> finish(id, new SynthesisError(SynthesisErrorCode.SYNTHESIS_UNAVAILABLE, failure)));
@@ -75,7 +75,14 @@ final class SynthesisTracker implements Serializable {
         return () -> listeners.remove(listener);
     }
 
-    private void handle(String id, JsonNode json) {
+    /** For {@link SimulatedSpeech}: the queued utterances by id, oldest first. */
+    Map<String, Utterance> queued() {
+        Map<String, Utterance> result = new LinkedHashMap<>();
+        pending.forEach((id, p) -> result.put(id, p.utterance()));
+        return result;
+    }
+
+    void handle(String id, JsonNode json) {
         switch (json.path("type").asString("")) {
             case "start", "resume" -> {
                 paused = false;

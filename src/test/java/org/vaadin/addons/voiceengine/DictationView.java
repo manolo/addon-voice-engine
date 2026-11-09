@@ -1,17 +1,21 @@
 package org.vaadin.addons.voiceengine;
 
+import org.vaadin.voiceengine.SpeechSynthesis;
+import org.vaadin.voiceengine.TriggerMode;
 import org.vaadin.voiceengine.ui.DictationButton;
 import org.vaadin.voiceengine.ui.LanguageSelect;
 import org.vaadin.voiceengine.ui.ReadAloudButton;
 import org.vaadin.voiceengine.ui.VoiceSelect;
 
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Paragraph;
 import com.vaadin.flow.component.orderedlayout.FlexComponent;
 import com.vaadin.flow.component.orderedlayout.HorizontalLayout;
 import com.vaadin.flow.component.orderedlayout.VerticalLayout;
 import com.vaadin.flow.component.textfield.TextArea;
+import com.vaadin.flow.component.textfield.TextField;
 import com.vaadin.flow.router.PageTitle;
 import com.vaadin.flow.router.Route;
 
@@ -45,7 +49,10 @@ public class DictationView extends VerticalLayout {
             setAlignItems(FlexComponent.Alignment.CENTER);
         }});
         add(text);
+        add(new PushToTalkField());
         add(new Button("Dictate in a modal dialog", e -> new DictationDialog().open()));
+        // iOS Safari only speaks later if speech was started in a user gesture first
+        SpeechSynthesis.prime(dictationButton);
 
         languageSelect.addValueChangeListener(e -> {
             voiceSelect.setLanguage(e.getValue());
@@ -53,6 +60,22 @@ public class DictationView extends VerticalLayout {
             readAloudButton.setLang(e.getValue());
         });
         voiceSelect.addValueChangeListener(e -> readAloudButton.setVoice(e.getValue()));
+    }
+
+    /** An icon-only push-to-talk button in a field's suffix. */
+    static class PushToTalkField extends TextField {
+        PushToTalkField() {
+            super("Push to talk");
+            setWidthFull();
+            setHelperText("Hold the microphone (or Space on it) while speaking, Escape cancels");
+            setSuffixComponent(new DictationButton(this) {{
+                setTriggerMode(TriggerMode.HOLD);
+                setIconOnly(true);
+                setTexts("Hold to dictate", "Listening");
+                addThemeVariants(ButtonVariant.TERTIARY);
+                setActiveVariants();
+            }});
+        }
     }
 
     /** Checks that speech works while a modal dialog makes the rest of the UI inert. */

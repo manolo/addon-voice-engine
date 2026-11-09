@@ -16,6 +16,7 @@ import com.vaadin.flow.component.dependency.JsModule;
 import com.vaadin.flow.component.html.Div;
 import com.vaadin.flow.component.icon.VaadinIcon;
 import com.vaadin.flow.component.select.Select;
+import com.vaadin.flow.dom.Style;
 import com.vaadin.flow.shared.Registration;
 
 import tools.jackson.databind.node.ArrayNode;
@@ -36,8 +37,12 @@ public class VoiceEngine extends Div {
 
   public VoiceEngine() {
     addClassNames("voice-engine");
-    getElement().getStyle().set("display", "inline-flex");
-    getElement().getStyle().set("gap", "calc(var(--lumo-space-xs))");
+    getStyle()
+        .setDisplay(Style.Display.INLINE_FLEX)
+        .setFlexWrap(Style.FlexWrap.WRAP)
+        .setAlignItems(Style.AlignItems.CENTER)
+        // Theme-agnostic gap (works with both Aura and Lumo), same as default layout spacing
+        .setGap("var(--vaadin-gap-s, 0.5rem)");
   }
 
   /**
@@ -320,6 +325,49 @@ public class VoiceEngine extends Div {
     return getElement().addEventListener("voice-changed", e -> {
       listener.onComponentEvent(new VoiceChangedEvent(this, true));
     });
+  }
+
+  /**
+   * Adds a listener that is notified when speech synthesis starts speaking.
+   *
+   * @param listener The listener to be added.
+   * @return A registration for the listener.
+   */
+  public Registration addSpeakStartListener(ComponentEventListener<SpeakStartEvent> listener) {
+    return getElement().addEventListener("speak-start", e -> {
+      listener.onComponentEvent(new SpeakStartEvent(this, true));
+    });
+  }
+
+  /**
+   * Adds a listener that is notified when speech synthesis finishes, either
+   * normally or because it was cancelled.
+   *
+   * @param listener The listener to be added.
+   * @return A registration for the listener.
+   */
+  public Registration addSpeakEndListener(ComponentEventListener<SpeakEndEvent> listener) {
+    return getElement().addEventListener("speak-end", e -> {
+      listener.onComponentEvent(new SpeakEndEvent(this, true));
+    });
+  }
+
+  /**
+   * SpeakStartEvent is triggered when speech synthesis starts speaking.
+   */
+  public static class SpeakStartEvent extends ComponentEvent<VoiceEngine> {
+    public SpeakStartEvent(VoiceEngine source, boolean fromClient) {
+      super(source, fromClient);
+    }
+  }
+
+  /**
+   * SpeakEndEvent is triggered when speech synthesis ends or is cancelled.
+   */
+  public static class SpeakEndEvent extends ComponentEvent<VoiceEngine> {
+    public SpeakEndEvent(VoiceEngine source, boolean fromClient) {
+      super(source, fromClient);
+    }
   }
 
   /**

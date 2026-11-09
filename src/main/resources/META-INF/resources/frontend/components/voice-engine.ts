@@ -135,10 +135,10 @@ export class SpeechConverter extends LitElement {
       this.recognition.addEventListener(eventName, (e: any) => {
         console.debug(`voice-engine: Event -> ${eventName}`, e);
         if (eventName === 'end') {
-          if (!this.isRecording) {
-            return;
+          // Recognition ended on its own (e.g. silence) or after stop/abort
+          if (this.isRecording) {
+            this.stopRecording();
           }
-          this.stopRecording();
         } else if (eventName === 'result') {
           const newResults = [...Array(e.results.length).keys()]
             .slice(this.recordIndex)
@@ -210,11 +210,15 @@ export class SpeechConverter extends LitElement {
           this.syntesis.resume();
         }
       }, 140000);
-      this.syntesis.speak(speaker);
-      speaker.onend = () => {
+      speaker.onstart = () => this.dispatchEvent(new CustomEvent('speak-start'));
+      const onDone = () => {
         resolve(null);
         clearInterval(this.syntTimer);
+        this.dispatchEvent(new CustomEvent('speak-end'));
       };
+      speaker.onend = onDone;
+      speaker.onerror = onDone;
+      this.syntesis.speak(speaker);
     });
   }
 

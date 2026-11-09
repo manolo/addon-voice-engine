@@ -5,6 +5,8 @@ import static org.vaadin.voiceengine.VoiceEngine.Buttons.MICROPHONE;
 import static org.vaadin.voiceengine.VoiceEngine.Buttons.PLAY;
 import static org.vaadin.voiceengine.VoiceEngine.Buttons.VOICE;
 
+import com.vaadin.flow.component.dependency.StyleSheet;
+import com.vaadin.flow.theme.aura.Aura;
 import org.vaadin.voiceengine.VoiceEngine;
 
 import com.vaadin.flow.component.button.Button;
@@ -15,6 +17,7 @@ import com.vaadin.flow.router.Route;
 import com.vaadin.flow.theme.lumo.LumoIcon;
 
 @Route("")
+@StyleSheet(Aura.STYLESHEET)
 public class VoiceEngineView extends Div {
 
     public VoiceEngineView() {

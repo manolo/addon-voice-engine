@@ -68,6 +68,31 @@ class SimulatedSpeechTest {
     }
 
     @Test
+    void replacingTargetKeepsValueWhenNothingIsRecognized() {
+        TextArea field = new TextArea();
+        field.setValue("kept");
+        DictationButton button = new DictationButton(field);
+        button.setAppend(false);
+        ui.add(field, button);
+        SpeechRecognition recognition = button.getRecognition();
+
+        SimulatedSpeech.start(recognition);
+        SimulatedSpeech.end(recognition);
+        assertEquals("kept", field.getValue());
+
+        SimulatedSpeech.start(recognition);
+        SimulatedSpeech.finalResult(recognition, "discarded");
+        SimulatedSpeech.error(recognition, RecognitionErrorCode.ABORTED);
+        SimulatedSpeech.end(recognition);
+        assertEquals("kept", field.getValue());
+
+        SimulatedSpeech.start(recognition);
+        SimulatedSpeech.finalResult(recognition, "replaced");
+        SimulatedSpeech.end(recognition);
+        assertEquals("replaced", field.getValue());
+    }
+
+    @Test
     void phasesAndInterimResultsReachListeners() {
         TextArea field = new TextArea();
         ui.add(field);

@@ -215,9 +215,12 @@ export function bindTrigger(host, el, id, mode) {
     cleanups.push(() => target.removeEventListener(type, fn, opts));
   };
   const isKey = (e) => e.key === ' ' || e.key === 'Enter';
+  const disabled = () => el.disabled || el.hasAttribute('disabled');
+  const startUnlessDisabled = () => { if (!disabled()) start(id); };
   if (mode === 'hold') {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
+      if (disabled()) return;
       if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
       start(id);
     });
@@ -226,13 +229,13 @@ export function bindTrigger(host, el, id, mode) {
     on(el, 'keydown', (e) => {
       if (!isKey(e)) return;
       e.preventDefault();
-      if (!e.repeat) start(id);
+      if (!e.repeat) startUnlessDisabled();
     });
     on(el, 'keyup', (e) => { if (isKey(e)) stopRecognition(id); });
     // A long press would open the context menu on touch devices
     on(el, 'contextmenu', (e) => e.preventDefault());
   } else {
-    on(el, 'click', () => (sessions.has(id) ? stopRecognition(id) : start(id)));
+    on(el, 'click', () => (sessions.has(id) ? stopRecognition(id) : startUnlessDisabled()));
   }
   on(document, 'keydown', (e) => {
     if (e.key === 'Escape' && sessions.has(id)) {
@@ -329,7 +332,10 @@ function start(id) {
   const { host, config, target } = c;
   const emit = (detail) => fire(host, RECOGNITION, { id, ...detail });
 
-  const base = target ? (config.liveAppend ? target.value || '' : '') : null;
+  // original is restored on abort or when nothing was recognized, base is
+  // what the text is joined to (empty when replacing the value)
+  const original = target ? target.value || '' : null;
+  const base = target ? (config.liveAppend ? original : '') : null;
   const finals = new Map();
   const interims = new Map();
   let errored = null;
@@ -347,6 +353,7 @@ function start(id) {
     }
   };
   const results = (list) => {
+    if (ended) return;
     for (const r of list) {
       if (r.isFinal) {
         interims.delete(r.index);
@@ -369,8 +376,8 @@ function start(id) {
     if (sessions.get(id) === session) sessions.delete(id);
     if (target) {
       interims.clear();
-      if (session.aborted || errored === 'aborted') {
-        target.value = base;
+      if (session.aborted || errored === 'aborted' || !joinParts([...finals.values()])) {
+        target.value = original;
       } else {
         updateTarget();
       }

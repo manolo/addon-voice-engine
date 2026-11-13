@@ -360,8 +360,9 @@ public class SpeechRecognition implements Serializable {
     /**
      * Writes the recognized text into the field in the browser while the user
      * speaks, without a round trip per word. When the session ends, the final
-     * text is set to the field on the server too; when it is aborted, the
-     * field gets its original value back.
+     * text is set to the field on the server too. When the session is aborted
+     * (e.g. with Escape) or recognizes nothing, the field gets its original
+     * value back, also when the text replaces the value.
      * <p>
      * Combine with {@link #setInterimResultsToServer(boolean)
      * setInterimResultsToServer(false)} to send only final results to the
@@ -416,7 +417,8 @@ public class SpeechRecognition implements Serializable {
      * automatically.
      *
      * @param transcriber transcribes the recording, or {@code null} to remove
-     *                    the fallback
+     *                    the fallback; a session that is
+     *                    already recording still uses it
      */
     public void setServerFallback(SpeechToText transcriber) {
         serverFallback = transcriber;
@@ -662,7 +664,8 @@ public class SpeechRecognition implements Serializable {
         finalResults.clear();
         interimResults.clear();
         sessionError = null;
-        liveBase = liveTarget != null && liveAppend && liveTarget.getValue() != null ? liveTarget.getValue() : "";
+        String original = liveTarget != null && liveTarget.getValue() != null ? liveTarget.getValue() : "";
+        liveBase = liveAppend ? original : "";
         setActive(true);
     }
 
@@ -690,7 +693,9 @@ public class SpeechRecognition implements Serializable {
         interimResults.clear();
         setActive(false);
         String transcript = getTranscript();
-        if (liveTarget != null && sessionError != RecognitionErrorCode.ABORTED) {
+        // Like in the browser: an aborted session or one that recognized
+        // nothing leaves the field as it was
+        if (liveTarget != null && sessionError != RecognitionErrorCode.ABORTED && !transcript.isEmpty()) {
             liveTarget.setValue(joinTo(liveBase, transcript));
         }
         new ArrayList<>(endListeners).forEach(l -> l.accept(transcript));

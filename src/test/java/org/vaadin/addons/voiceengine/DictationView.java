@@ -67,9 +67,11 @@ public class DictationView extends VerticalLayout {
         PushToTalkField() {
             super("Push to talk");
             setWidthFull();
-            setHelperText("Hold the microphone (or Space on it) while speaking, Escape cancels");
+            setHelperText("Hold the microphone (or Space on it) while speaking. "
+                    + "The spoken text replaces the value, Escape cancels.");
             setSuffixComponent(new DictationButton(this) {{
                 setTriggerMode(TriggerMode.HOLD);
+                setAppend(false);
                 setIconOnly(true);
                 setTexts("Hold to dictate", "Listening");
                 addThemeVariants(ButtonVariant.TERTIARY);

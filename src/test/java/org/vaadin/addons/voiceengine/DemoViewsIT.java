@@ -258,6 +258,36 @@ class DemoViewsIT {
     }
 
     @Test
+    void dictation_replacingFieldIsRestored() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator field = page.locator("vaadin-text-field");
+        Locator input = field.locator("input");
+        Locator mic = field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Hold to dictate"));
+        input.fill("kept");
+        input.blur();
+
+        // A press without speech leaves the value as it was
+        mic.hover();
+        page.mouse().down();
+        page.waitForFunction("() => !!window.fakeRecognition");
+        page.mouse().up();
+        assertThat(mic).isVisible();
+        assertThat(input).hasValue("kept");
+
+        // Escape restores the original value, also against late results
+        page.evaluate("() => window.fakeRecognition = null");
+        page.mouse().down();
+        say("replacement", false);
+        assertThat(input).hasValue("replacement");
+        page.keyboard().press("Escape");
+        assertThat(mic).isVisible();
+        page.evaluate("() => window.fakeRecognition.say('late', true)");
+        assertThat(input).hasValue("kept");
+        page.mouse().up();
+    }
+
+    @Test
     void lowLevelApi_phasesAndInterimResults() {
         page.addInitScript(FAKE_SPEECH);
         page.navigate(BASE + "low-level");

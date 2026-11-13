@@ -45,7 +45,7 @@ import tools.jackson.databind.node.ObjectNode;
  * (no server round trip, push-to-talk, Escape to abort), and write the text
  * into a field in the browser with {@link #setLiveTarget(HasValue)}.
  * <p>
- * Speech recognition is not available in all browsers (e.g. Firefox), see
+ * Speech recognition is not available in all browsers (e.g. Firefox for Android), see
  * {@link #getSupport()}. A {@link #setServerFallback(SpeechToText) server
  * fallback} can cover those. The browser asks the user for microphone
  * permission on first use.
@@ -410,7 +410,7 @@ public class SpeechRecognition implements Serializable {
 
     /**
      * Records the audio and transcribes it on the server when the browser
-     * cannot recognize speech: when it has no speech recognition (Firefox), or
+     * cannot recognize speech: when it has no speech recognition (e.g. Firefox for Android), or
      * when its recognition service fails before any result (e.g. a Chromium
      * build without Google's service). The text arrives as a single final
      * result when the session is stopped; a recording is never stopped

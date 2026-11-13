@@ -64,7 +64,7 @@ class DemoViewsIT {
             })();
             """;
 
-    /** Removes speech recognition, like in Firefox. */
+    /** Removes speech recognition, like in Firefox for Android. */
     private static final String NO_RECOGNITION = """
             delete window.SpeechRecognition;
             delete window.webkitSpeechRecognition;

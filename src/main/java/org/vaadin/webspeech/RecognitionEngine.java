@@ -37,7 +37,7 @@ public enum RecognitionEngine {
      * {@link SpeechRecognition#setServerFallback(SpeechToText) server
      * fallback}: the audio goes to your server or stays on the device, never
      * to the browser vendor's cloud service. Also uses the server in browsers
-     * without speech recognition, e.g. Firefox. If the pack can be downloaded,
+     * without speech recognition, e.g. Firefox for Android. If the pack can be downloaded,
      * the download is started for the next time. Without a server fallback,
      * works like {@link #ON_DEVICE_ONLY}.
      */

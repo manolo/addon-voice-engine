@@ -27,7 +27,7 @@ public enum RecognitionErrorCode {
      */
     PHRASES_NOT_SUPPORTED("phrases-not-supported"),
     /**
-     * The browser does not support speech recognition, e.g. Firefox, and no
+     * The browser does not support speech recognition, e.g. Firefox for Android, and no
      * {@link SpeechRecognition#setServerFallback(SpeechToText) server fallback}
      * is set.
      */

@@ -11,7 +11,7 @@ public enum SpeechSupport {
     UNKNOWN,
     /** The API is available in the browser. */
     SUPPORTED,
-    /** The API is not available, e.g. SpeechRecognition in Firefox. */
+    /** The API is not available, e.g. SpeechRecognition in Firefox for Android. */
     UNSUPPORTED;
 
     static SpeechSupport of(boolean supported) {

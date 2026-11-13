@@ -105,7 +105,7 @@ public class LowLevelApiView extends VerticalLayout {
         });
         recognition.addErrorListener(error -> log("recognition error: " + error));
         recognition.addPhaseListener(phase -> log("recognition phase: " + phase));
-        // Used in browsers without speech recognition (Firefox). A real
+        // Used in browsers without speech recognition (Firefox for Android). A real
         // application would call a transcription service here.
         recognition.setServerFallback(recording -> "server fallback received "
                 + recording.audio().readAllBytes().length + " bytes of " + recording.contentType() + " as "

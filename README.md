@@ -168,9 +168,15 @@ Phase events are only sent by the browser while there is a phase listener.
 
 ### Server fallback
 
-Firefox has no speech recognition, and some Chromium builds have the API but
-no service behind it. For those, the session can record the audio and let your
-server transcribe it, with e.g. Spring AI, OpenAI, Azure or a local Whisper:
+The session can also record the audio and let your server transcribe it, with
+e.g. Spring AI, OpenAI, Azure or a local Whisper. Reasons to set up such a
+fallback:
+
+- Browsers without usable speech recognition, such as Firefox for Android, and
+  locked-down Chromium builds that have the API but no service behind it.
+- A policy that audio must never go to the browser vendor's cloud: with
+  `RecognitionEngine.ON_DEVICE_OR_SERVER` it is recognized on the device or on
+  your server, see [Where speech is processed](#where-speech-is-processed).
 
 ```java
 recognition.setServerFallback(recording -> transcriber.transcribe(recording.audio(), recording.lang()));
@@ -194,13 +200,14 @@ The recording is uploaded when the session is stopped, and the text arrives as
 a single final result. The transcriber runs in the upload request without the
 session lock, so it can take its time but must not touch components.
 
-The fallback is used when the browser cannot recognize speech. To decide
-yourself where speech goes, see [Where speech is processed](#where-speech-is-processed).
+With the default engine, the fallback is used only when the browser cannot
+recognize speech. `RecognitionEngine.SERVER` always uses it.
 
 ## Browser support
 
 Speech synthesis works in all modern browsers. Speech recognition works in
-Chrome, Edge and Safari, but not in Firefox. Check with
+current Chrome, Edge, Safari and desktop Firefox, but not in Firefox for
+Android or in Chromium builds without a recognition service. Check with
 `SpeechRecognition.getSupport()` / `SpeechSynthesis.getSupport()`; they return
 `UNKNOWN` until the browser has reported its capabilities, shortly after the
 add-on is first used in a UI. When recognition is unavailable, sessions end
@@ -222,7 +229,7 @@ also recognize on the device, which keeps the audio private and works offline:
   downloadable pack is downloaded for the next time.
 - `RecognitionEngine.ON_DEVICE_OR_SERVER`: on the device when the language pack
   is installed, otherwise your [server fallback](#server-fallback), never the
-  vendor's cloud. Also covers Firefox. A downloadable pack is downloaded for
+  vendor's cloud. Also covers browsers without recognition. A downloadable pack is downloaded for
   the next time.
 - `RecognitionEngine.SERVER`: always your server fallback.
 - `SpeechRecognition.checkOnDeviceAvailability(lang, callback)` and

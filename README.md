@@ -157,7 +157,7 @@ trigger. `DictationButton` uses exactly this.
 ```java
 RecognitionOptions.builder()
         .engine(RecognitionEngine.PREFER_ON_DEVICE)  // see "Where speech is processed"
-        .phrases(List.of("Vaadin", "SKU-1234"))      // contextual biasing, where supported
+        .phrases(List.of("Vaadin", "SKU-1234"))      // contextual biasing: on the device and the server fallback
         .cancelSpeechOnStart(true)                   // stop reading aloud when the user starts talking
         .build();
 

@@ -527,7 +527,9 @@ async function startBrowser(ctx) {
   recognition.interimResults = !!config.interimResults;
   recognition.maxAlternatives = config.maxAlternatives || 1;
   if (processLocally) recognition.processLocally = true;
-  if (config.phrases && config.phrases.length && typeof SpeechRecognitionPhrase !== 'undefined') {
+  // Chrome applies phrases only on the device and fails the session with
+  // phrases-not-supported otherwise, so cloud recognition goes without them
+  if (processLocally && config.phrases && config.phrases.length && typeof SpeechRecognitionPhrase !== 'undefined') {
     recognition.phrases = config.phrases.map((p) => new SpeechRecognitionPhrase(p));
   }
 

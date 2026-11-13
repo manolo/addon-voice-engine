@@ -229,11 +229,12 @@ public final class RecognitionOptions implements Serializable {
 
         /**
          * Words and phrases that recognition should favour (contextual
-         * biasing), e.g. customer names or product codes. A hint: browsers
-         * that do not know the feature ignore it. Browsers that know it but
-         * cannot apply it (e.g. Chrome with cloud recognition) fail with
-         * {@link RecognitionErrorCode#PHRASES_NOT_SUPPORTED}, so combine it with
-         * {@link RecognitionEngine#ON_DEVICE_ONLY} or handle that error.
+         * biasing), e.g. customer names or product codes. A hint: they are
+         * applied when speech is recognized on the device (see
+         * {@link RecognitionEngine}) and passed to the
+         * {@link Recording#phrases() server fallback}. Cloud recognition in
+         * the browser does not support them, so there they are left out
+         * instead of failing the session.
          *
          * @param phrases the phrases, empty (default) for none
          * @return this builder

@@ -22,8 +22,9 @@ public enum RecognitionErrorCode {
     LANGUAGE_NOT_SUPPORTED("language-not-supported"),
     BAD_GRAMMAR("bad-grammar"),
     /**
-     * The browser cannot apply {@link RecognitionOptions#phrases()}, e.g.
-     * Chrome with cloud recognition.
+     * The browser cannot apply {@link RecognitionOptions#phrases()}. The
+     * add-on only passes phrases to on-device recognition, where Chrome
+     * supports them, so this is rare.
      */
     PHRASES_NOT_SUPPORTED("phrases-not-supported"),
     /**

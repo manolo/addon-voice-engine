@@ -7,6 +7,7 @@ import org.vaadin.webspeech.ui.LanguageSelect;
 import org.vaadin.webspeech.ui.ReadAloudButton;
 import org.vaadin.webspeech.ui.VoiceSelect;
 
+import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.button.Button;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
@@ -67,7 +68,7 @@ public class DictationView extends VerticalLayout {
         PushToTalkField() {
             super("Push to talk");
             setWidthFull();
-            setHelperText("Hold the microphone (or Space on it) while speaking. "
+            setHelperText("Hold the microphone (or Space on it, or F8 anywhere) while speaking. "
                     + "The spoken text replaces the value, Escape cancels.");
             setSuffixComponent(new DictationButton(this) {{
                 setTriggerMode(TriggerMode.HOLD);
@@ -76,6 +77,7 @@ public class DictationView extends VerticalLayout {
                 setTexts("Hold to dictate", "Listening");
                 addThemeVariants(ButtonVariant.TERTIARY);
                 setActiveVariants();
+                getRecognition().bindKey(Key.F8, TriggerMode.HOLD);
             }});
         }
     }

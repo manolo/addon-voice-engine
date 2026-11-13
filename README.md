@@ -47,6 +47,7 @@ field.setSuffixComponent(new DictationButton(field) {{
     setTexts("Hold to dictate", "Listening");
     addThemeVariants(ButtonVariant.TERTIARY);
     setActiveVariants();                // keep the own look while listening
+    getRecognition().bindKey(Key.F8, TriggerMode.HOLD);  // also while F8 is held, anywhere on the page
 }});
 ```
 

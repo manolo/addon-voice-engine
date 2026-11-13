@@ -53,6 +53,22 @@ class SimulatedSpeechTest {
     }
 
     @Test
+    void appendsToTheValueTheBrowserReportsAtStart() {
+        TextArea field = new TextArea();
+        field.setValue("old");
+        DictationButton button = new DictationButton(field);
+        ui.add(field, button);
+        SpeechRecognition recognition = button.getRecognition();
+
+        // The user edited the field, but no value change reached the server
+        recognition.handle(tools.jackson.databind.node.JsonNodeFactory.instance.objectNode()
+                .put("type", "starting").put("original", "edited"));
+        SimulatedSpeech.finalResult(recognition, "hello");
+        SimulatedSpeech.end(recognition);
+        assertEquals("edited hello", field.getValue());
+    }
+
+    @Test
     void abortKeepsOriginalValue() {
         TextArea field = new TextArea();
         field.setValue("Before");

@@ -258,6 +258,55 @@ class DemoViewsIT {
     }
 
     @Test
+    void dictation_pushToTalkWithKeyAnywhere() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator field = page.locator("vaadin-text-field");
+        Locator listening = field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Listening"));
+        page.locator("body").click();
+        // The key is bound once the module has loaded
+        page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        page.keyboard().down("F8");
+        say("by key", true);
+        assertThat(listening).isVisible();
+        page.keyboard().up("F8");
+        assertThat(listening).isHidden();
+        assertThat(field.locator("input")).hasValue("by key");
+    }
+
+    @Test
+    void dictation_syntheticPointerPressStarts() {
+        // e.g. a shortcut forwarded as a pointer press: no active pointer to capture
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator field = page.locator("vaadin-text-field");
+        // The button's name changes while listening, so locate it by tag
+        Locator mic = field.locator("vaadin-button");
+        assertThat(mic).hasAccessibleName("Hold to dictate");
+        page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        mic.dispatchEvent("pointerdown", java.util.Map.of("button", 0, "pointerId", 42));
+        say("synthetic", true);
+        mic.dispatchEvent("pointerup", java.util.Map.of("button", 0, "pointerId", 42));
+        assertThat(field.locator("input")).hasValue("synthetic");
+        assertTrue(pageErrors.isEmpty(), pageErrors.toString());
+    }
+
+    @Test
+    void dictation_appendsToValueTheUserSees() {
+        // Edited without a blur, so the server still has the old value
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator textarea = textArea().locator("textarea");
+        textarea.fill("typed");
+        button("Dictate").evaluate("b => b.click()");
+        assertThat(button("Stop dictation")).isVisible();
+        say("spoken", true);
+        button("Stop dictation").evaluate("b => b.click()");
+        assertThat(button("Dictate")).isVisible();
+        assertThat(textarea).hasValue("typed spoken");
+    }
+
+    @Test
     void dictation_replacingFieldIsRestored() {
         page.addInitScript(FAKE_SPEECH);
         page.navigate(BASE);

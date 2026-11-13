@@ -167,6 +167,8 @@ const configs = new Map();
 const sessions = new Map();
 /** id -> function removing the trigger's listeners. */
 const triggers = new Map();
+/** id -> function removing the keyboard shortcut's listeners. */
+const keyTriggers = new Map();
 
 /**
  * Stores the configuration of a session. Config: lang, continuous,
@@ -202,6 +204,7 @@ export function isActive(id) {
 export function dispose(id) {
   abortRecognition(id);
   unbindTrigger(id);
+  unbindKey(id);
   configs.delete(id);
 }
 
@@ -222,7 +225,12 @@ export function bindTrigger(host, el, id, mode) {
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
       if (disabled()) return;
-      if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+      try {
+        // Keeps the pointerup on the button although the pointer moves away
+        if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+      } catch (ignored) {
+        // Synthetic pointer events (forwarded shortcuts, tests) have no active pointer
+      }
       start(id);
     });
     on(el, 'pointerup', () => stopRecognition(id));
@@ -238,14 +246,63 @@ export function bindTrigger(host, el, id, mode) {
   } else {
     on(el, 'click', () => (sessions.has(id) ? stopRecognition(id) : startUnlessDisabled()));
   }
-  on(document, 'keydown', (e) => {
-    if (e.key === 'Escape' && sessions.has(id)) {
+  on(document, 'keydown', escapeAborts(id), true);
+  triggers.set(id, () => cleanups.forEach((c) => c()));
+}
+
+/** Escape aborts a running session, once even if several bindings listen. */
+function escapeAborts(id) {
+  return (e) => {
+    const s = sessions.get(id);
+    if (e.key === 'Escape' && s && !s.aborted) {
       e.preventDefault();
       e.stopPropagation();
-      abortRecognition(id);
+      s.abort();
     }
-  }, true);
-  triggers.set(id, () => cleanups.forEach((c) => c()));
+  };
+}
+
+/**
+ * Keyboard shortcut anywhere on the page. keys: KeyboardEvent.key or .code
+ * values, e.g. ['F8']. mode: toggle (press to start and stop) or hold.
+ */
+export function bindKey(host, id, keys, mode) {
+  unbindKey(id);
+  const matches = (e) => keys.includes(e.key) || keys.includes(e.code);
+  const down = (e) => {
+    if (!matches(e)) return;
+    e.preventDefault();
+    if (e.repeat) return;
+    if (mode === 'hold') {
+      start(id);
+    } else if (sessions.has(id)) {
+      stopRecognition(id);
+    } else {
+      start(id);
+    }
+  };
+  const up = (e) => {
+    if (!matches(e)) return;
+    e.preventDefault();
+    if (mode === 'hold') stopRecognition(id);
+  };
+  const escape = escapeAborts(id);
+  document.addEventListener('keydown', down, true);
+  document.addEventListener('keyup', up, true);
+  document.addEventListener('keydown', escape, true);
+  keyTriggers.set(id, () => {
+    document.removeEventListener('keydown', down, true);
+    document.removeEventListener('keyup', up, true);
+    document.removeEventListener('keydown', escape, true);
+  });
+}
+
+export function unbindKey(id) {
+  const cleanup = keyTriggers.get(id);
+  if (cleanup) {
+    keyTriggers.delete(id);
+    cleanup();
+  }
 }
 
 export function unbindTrigger(id) {
@@ -344,7 +401,8 @@ function start(id) {
 
   const session = { aborted: false, stopped: false, stop() {}, abort() {} };
   sessions.set(id, session);
-  emit({ type: 'starting' });
+  // The field's value as the user sees it, which the server may not have yet
+  emit(target ? { type: 'starting', original } : { type: 'starting' });
   if (config.cancelSpeech) cancel();
 
   const updateTarget = () => {

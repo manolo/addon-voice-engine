@@ -11,12 +11,15 @@ import java.util.stream.Collectors;
 
 import com.vaadin.flow.component.Component;
 import com.vaadin.flow.component.HasValue;
+import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.UI;
 import com.vaadin.flow.dom.Element;
 import com.vaadin.flow.function.SerializableConsumer;
 import com.vaadin.flow.shared.Registration;
 
 import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.node.ArrayNode;
+import tools.jackson.databind.node.JsonNodeFactory;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
@@ -76,6 +79,7 @@ public class SpeechRecognition implements Serializable {
     private Component trigger;
     private TriggerMode triggerMode;
     private Registration triggerBinding;
+    private Registration keyBinding;
 
     private HasValue<?, String> liveTarget;
     private boolean liveAppend = true;
@@ -338,6 +342,58 @@ public class SpeechRecognition implements Serializable {
         };
     }
 
+    /**
+     * Lets a key start and stop the session anywhere on the page, e.g. F8 for
+     * push-to-talk. Like {@link #bindTrigger(Component, TriggerMode)}, the
+     * browser starts listening directly in the key event, and Escape aborts.
+     * Active while the session's owner is attached.
+     * <p>
+     * The key's default action is prevented, so use a key that is not needed
+     * for typing, such as a function key. Only one key can be bound at a time;
+     * binding another one replaces it. It can be used together with a bound
+     * trigger component.
+     *
+     * <pre>{@code
+     * dictationButton.getRecognition().bindKey(Key.F8, TriggerMode.HOLD);
+     * }</pre>
+     *
+     * @param key  the key
+     * @param mode {@link TriggerMode#TOGGLE} to start and stop with presses,
+     *             {@link TriggerMode#HOLD} to listen while the key is held
+     *             down
+     * @return a registration for unbinding the key
+     */
+    public Registration bindKey(Key key, TriggerMode mode) {
+        Objects.requireNonNull(key, "key must not be null");
+        Objects.requireNonNull(mode, "mode must not be null");
+        unbindKey();
+        ArrayNode keys = JsonNodeFactory.instance.arrayNode();
+        key.getKeys().forEach(keys::add);
+        keyBinding = new OwnerBinding(owner, ui -> {
+            connect(ui);
+            client.call("(m.configure(this, $0, $1, $2), m.bindKey(this, $0, $3, $4))", id, config(),
+                    liveTargetElement(), keys, mode.jsName());
+            return () -> {
+                if (client != null) {
+                    client.call("m.unbindKey($0)", id);
+                }
+            };
+        });
+        Registration binding = keyBinding;
+        return () -> {
+            if (keyBinding == binding) {
+                unbindKey();
+            }
+        };
+    }
+
+    private void unbindKey() {
+        if (keyBinding != null) {
+            keyBinding.remove();
+            keyBinding = null;
+        }
+    }
+
     private void unbindTrigger() {
         if (triggerBinding != null) {
             triggerBinding.remove();
@@ -582,6 +638,7 @@ public class SpeechRecognition implements Serializable {
     /** Releases everything, the session cannot be used after this. */
     void release() {
         unbindTrigger();
+        unbindKey();
         attachRegistration.remove();
         detachRegistration.remove();
         if (eventRegistration != null) {
@@ -597,7 +654,7 @@ public class SpeechRecognition implements Serializable {
 
     /** Sends the current configuration to the browser, for trigger-started sessions. */
     private void pushConfig() {
-        if (client != null && eventRegistration != null && triggerBinding != null) {
+        if (client != null && eventRegistration != null && (triggerBinding != null || keyBinding != null)) {
             client.call("m.configure(this, $0, $1, $2)", id, config(), liveTargetElement());
         }
     }
@@ -629,6 +686,11 @@ public class SpeechRecognition implements Serializable {
                 // Also sent for sessions started from the server, which are active already
                 if (!active) {
                     begin();
+                }
+                // The browser's value is what the user saw, the server's may
+                // be older if the field was edited without a blur
+                if (liveAppend && json.has("original")) {
+                    liveBase = json.path("original").asString("");
                 }
             }
             case "result" -> {

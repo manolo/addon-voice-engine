@@ -192,6 +192,59 @@ class DemoViewsIT {
         assertThat(dialog.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Dictate"))).isVisible();
     }
 
+    private Locator pushToTalkField() {
+        return page.locator("vaadin-text-field").filter(new Locator.FilterOptions().setHasText("Push to talk"));
+    }
+
+    private Locator searchField() {
+        return page.locator("vaadin-text-field").filter(new Locator.FilterOptions().setHasText("Search"));
+    }
+
+    @Test
+    void search_buttonFinishesDictationFirst() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator mic = searchField().locator("vaadin-button");
+        mic.click();
+        assertThat(mic).hasAccessibleName("Listening");
+        say("vaadin flow", true);
+        assertThat(searchField().locator("input")).hasValue("vaadin flow");
+        // The server only gets the text at the end of the session
+        button("Search").click();
+        assertThat(page.locator("#search-result")).hasText("Searched for \"vaadin flow\"");
+        assertThat(mic).hasAccessibleName("Dictate search");
+    }
+
+    @Test
+    void search_enterFinishesDictationFirst() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator mic = searchField().locator("vaadin-button");
+        mic.click();
+        assertThat(mic).hasAccessibleName("Listening");
+        say("by voice", true);
+        searchField().locator("input").press("Enter");
+        assertThat(page.locator("#search-result")).hasText("Searched for \"by voice\"");
+        assertThat(mic).hasAccessibleName("Dictate search");
+    }
+
+    @Test
+    void tapOrHold_longPressStopsOnRelease() {
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE);
+        Locator mic = searchField().locator("vaadin-button");
+        assertThat(mic).hasAccessibleName("Dictate search");
+        page.waitForLoadState(com.microsoft.playwright.options.LoadState.NETWORKIDLE);
+        mic.hover();
+        page.mouse().down();
+        say("held", true);
+        assertThat(mic).hasAccessibleName("Listening");
+        page.waitForTimeout(600);
+        page.mouse().up();
+        assertThat(mic).hasAccessibleName("Dictate search");
+        assertThat(searchField().locator("input")).hasValue("held");
+    }
+
     private void say(String text, boolean isFinal) {
         page.waitForFunction("() => !!window.fakeRecognition");
         page.evaluate("([t, f]) => window.fakeRecognition.say(t, f)", List.of(text, isFinal));
@@ -245,7 +298,7 @@ class DemoViewsIT {
     void dictation_pushToTalk() {
         page.addInitScript(FAKE_SPEECH);
         page.navigate(BASE);
-        Locator field = page.locator("vaadin-text-field");
+        Locator field = pushToTalkField();
         Locator mic = field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Hold to dictate"));
         mic.hover();
         page.mouse().down();
@@ -261,7 +314,7 @@ class DemoViewsIT {
     void dictation_pushToTalkWithKeyAnywhere() {
         page.addInitScript(FAKE_SPEECH);
         page.navigate(BASE);
-        Locator field = page.locator("vaadin-text-field");
+        Locator field = pushToTalkField();
         Locator listening = field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Listening"));
         page.locator("body").click();
         // The key is bound once the module has loaded
@@ -279,7 +332,7 @@ class DemoViewsIT {
         // e.g. a shortcut forwarded as a pointer press: no active pointer to capture
         page.addInitScript(FAKE_SPEECH);
         page.navigate(BASE);
-        Locator field = page.locator("vaadin-text-field");
+        Locator field = pushToTalkField();
         // The button's name changes while listening, so locate it by tag
         Locator mic = field.locator("vaadin-button");
         assertThat(mic).hasAccessibleName("Hold to dictate");
@@ -310,7 +363,7 @@ class DemoViewsIT {
     void dictation_replacingFieldIsRestored() {
         page.addInitScript(FAKE_SPEECH);
         page.navigate(BASE);
-        Locator field = page.locator("vaadin-text-field");
+        Locator field = pushToTalkField();
         Locator input = field.locator("input");
         Locator mic = field.getByRole(AriaRole.BUTTON, new Locator.GetByRoleOptions().setName("Hold to dictate"));
         input.fill("kept");

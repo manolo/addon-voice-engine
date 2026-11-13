@@ -387,6 +387,36 @@ public class SpeechRecognition implements Serializable {
         };
     }
 
+    /**
+     * Makes clicks on the component wait for the session to finish: while
+     * the session is active, a click first stops it, and the click is
+     * replayed in the browser once the session has ended. The click
+     * listeners on the server then see the final text in the
+     * {@link #setLiveTarget(HasValue) live target}, which otherwise reaches
+     * the server only at the end of the session. Typical for a search or
+     * submit button next to a field with a microphone.
+     * <p>
+     * Enter in a single-line live target works the same way by default.
+     * Active while the component is attached.
+     *
+     * @param component the component whose clicks act on the recognized
+     *                  text, typically a button
+     * @return a registration for removing the behaviour
+     */
+    public Registration finishBefore(Component component) {
+        Objects.requireNonNull(component, "component must not be null");
+        String key = id + ":" + SpeechClient.newId();
+        return new OwnerBinding(component, ui -> {
+            connect(ui);
+            client.call("m.finishBefore($0, $1, $2)", id, component.getElement(), key);
+            return () -> {
+                if (client != null) {
+                    client.call("m.unfinishBefore($0)", key);
+                }
+            };
+        });
+    }
+
     private void unbindKey() {
         if (keyBinding != null) {
             keyBinding.remove();
@@ -419,6 +449,12 @@ public class SpeechRecognition implements Serializable {
      * text is set to the field on the server too. When the session is aborted
      * (e.g. with Escape) or recognizes nothing, the field gets its original
      * value back, also when the text replaces the value.
+     * <p>
+     * The server gets the text only when the session ends, so server code
+     * reading the field during the session sees the old value. Enter in a
+     * single-line field therefore finishes the session before the field's own
+     * listeners get it; use {@link #finishBefore(Component)} for buttons that
+     * act on the text.
      * <p>
      * Combine with {@link #setInterimResultsToServer(boolean)
      * setInterimResultsToServer(false)} to send only final results to the

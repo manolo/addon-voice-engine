@@ -9,6 +9,7 @@ import org.vaadin.webspeech.ui.VoiceSelect;
 
 import com.vaadin.flow.component.Key;
 import com.vaadin.flow.component.button.Button;
+import com.vaadin.flow.component.html.Span;
 import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.dialog.Dialog;
 import com.vaadin.flow.component.html.Paragraph;
@@ -51,6 +52,7 @@ public class DictationView extends VerticalLayout {
         }});
         add(text);
         add(new PushToTalkField());
+        add(new SearchBar());
         add(new Button("Dictate in a modal dialog", e -> new DictationDialog().open()));
         // iOS Safari only speaks later if speech was started in a user gesture first
         SpeechSynthesis.prime(dictationButton);
@@ -79,6 +81,40 @@ public class DictationView extends VerticalLayout {
                 setActiveVariants();
                 getRecognition().bindKey(Key.F8, TriggerMode.HOLD);
             }});
+        }
+    }
+
+    /**
+     * A search field with a microphone: Search and Enter finish dictation
+     * first, so the search sees the dictated text.
+     */
+    static class SearchBar extends HorizontalLayout {
+        private final TextField query = new TextField("Search") {{
+            setPlaceholder("Tap or hold the microphone, then Search or Enter");
+            setWidthFull();
+        }};
+        private final DictationButton mic = new DictationButton(query) {{
+            setIconOnly(true);
+            setTexts("Dictate search", "Listening");
+            addThemeVariants(ButtonVariant.TERTIARY);
+        }};
+        private final Button search = new Button("Search", e -> search());
+        private final Span result = new Span() {{
+            setId("search-result");
+        }};
+
+        SearchBar() {
+            setWidthFull();
+            setAlignItems(FlexComponent.Alignment.BASELINE);
+            query.setSuffixComponent(mic);
+            query.addKeyDownListener(Key.ENTER, e -> search());
+            mic.getRecognition().finishBefore(search);
+            add(query, search, result);
+        }
+
+        private void search() {
+            result.setText(query.getValue().isBlank() ? "Type or say something first"
+                    : "Searched for \"" + query.getValue() + "\"");
         }
     }
 

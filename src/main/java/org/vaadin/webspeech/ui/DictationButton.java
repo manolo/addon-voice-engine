@@ -20,8 +20,9 @@ import com.vaadin.flow.component.button.ButtonVariant;
 import com.vaadin.flow.component.icon.VaadinIcon;
 
 /**
- * A button that dictates text into a field using speech recognition. Click to
- * start, click again to stop, Escape to cancel. The field is updated in the
+ * A button that dictates text into a field using speech recognition. Tap to
+ * start and tap again to stop, or hold it down while speaking; Escape
+ * cancels. The field is updated in the
  * browser while the user speaks, and the final text is set to it on the
  * server when dictation ends.
  *
@@ -30,19 +31,21 @@ import com.vaadin.flow.component.icon.VaadinIcon;
  * add(notes, new DictationButton(notes));
  * }</pre>
  * <p>
- * The button keeps listening until clicked again; for a single request (a
+ * After a tap, the button keeps listening until tapped again; for a single request (a
  * search box, a command), use {@link #setContinuous(boolean) setContinuous(false)}.
  * <p>
  * The browser starts listening directly when the button is pressed, without a
  * server round trip. With {@link #setTriggerMode(TriggerMode) TriggerMode.HOLD},
- * it works as push-to-talk. For more control, use {@link #getRecognition()},
+ * it works only as push-to-talk. A button that acts on the dictated text
+ * should use {@link SpeechRecognition#finishBefore(Component)
+ * getRecognition().finishBefore(button)}. For more control, use {@link #getRecognition()},
  * e.g. for a {@link SpeechRecognition#setServerFallback server fallback}.
  */
 public class DictationButton extends Button {
 
     private final HasValue<?, String> target;
     private final SpeechRecognition recognition;
-    private TriggerMode triggerMode = TriggerMode.TOGGLE;
+    private TriggerMode triggerMode = TriggerMode.TAP_OR_HOLD;
     private boolean append = true;
     private boolean iconOnly;
     private List<ButtonVariant> activeVariants = List.of(ButtonVariant.ERROR);
@@ -137,7 +140,11 @@ public class DictationButton extends Button {
         });
         if (isEnabled()) {
             setTooltipText(active ? "Stop listening, Escape to cancel"
-                    : triggerMode == TriggerMode.HOLD ? "Hold down and speak" : "Dictate text using your microphone");
+                    : switch (triggerMode) {
+                        case HOLD -> "Hold down and speak";
+                        case TAP_OR_HOLD -> "Tap to dictate, or hold down and speak";
+                        case TOGGLE -> "Dictate text using your microphone";
+                    });
         }
     }
 
@@ -182,9 +189,10 @@ public class DictationButton extends Button {
     }
 
     /**
-     * @param triggerMode {@link TriggerMode#TOGGLE} (default) to start and
-     *                    stop with clicks, {@link TriggerMode#HOLD} for
-     *                    push-to-talk
+     * @param triggerMode {@link TriggerMode#TAP_OR_HOLD} (default) for
+     *                    both tapping and holding, {@link TriggerMode#TOGGLE}
+     *                    to start and stop with clicks only,
+     *                    {@link TriggerMode#HOLD} for push-to-talk only
      */
     public void setTriggerMode(TriggerMode triggerMode) {
         this.triggerMode = Objects.requireNonNull(triggerMode, "triggerMode must not be null");

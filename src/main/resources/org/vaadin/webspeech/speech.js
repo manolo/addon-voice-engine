@@ -210,6 +210,9 @@ export function dispose(id) {
 
 /* Trigger binding: the browser starts the session in the element's event handler. */
 
+/** A tap-or-hold press longer than this (ms) stops listening on release. */
+const HOLD_THRESHOLD = 400;
+
 export function bindTrigger(host, el, id, mode) {
   unbindTrigger(id);
   if (!el) return;
@@ -221,28 +224,67 @@ export function bindTrigger(host, el, id, mode) {
   const isKey = (e) => e.key === ' ' || e.key === 'Enter';
   const disabled = () => el.disabled || el.hasAttribute('disabled');
   const startUnlessDisabled = () => { if (!disabled()) start(id); };
-  if (mode === 'hold') {
+  const capture = (e) => {
+    try {
+      // Keeps the pointerup on the button although the pointer moves away
+      if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
+    } catch (ignored) {
+      // Synthetic pointer events (forwarded shortcuts, tests) have no active pointer
+    }
+  };
+  if (mode === 'hold' || mode === 'tap-or-hold') {
+    // hold: listen while pressed. tap-or-hold: a press starts, a short tap
+    // keeps listening until the next press, a longer press stops on release.
+    let pressStart = 0;
+    // A click following a press was handled by the press
+    let pressed = false;
+    const press = () => {
+      pressed = true;
+      if (mode === 'tap-or-hold' && sessions.has(id)) {
+        pressStart = 0;
+        stopRecognition(id);
+      } else if (!disabled()) {
+        pressStart = Date.now();
+        start(id);
+      }
+    };
+    const release = () => {
+      if (mode === 'hold' || (pressStart && Date.now() - pressStart >= HOLD_THRESHOLD)) {
+        stopRecognition(id);
+      }
+      pressStart = 0;
+    };
     on(el, 'pointerdown', (e) => {
       if (e.button !== 0) return;
-      if (disabled()) return;
-      try {
-        // Keeps the pointerup on the button although the pointer moves away
-        if (el.setPointerCapture) el.setPointerCapture(e.pointerId);
-      } catch (ignored) {
-        // Synthetic pointer events (forwarded shortcuts, tests) have no active pointer
-      }
-      start(id);
+      capture(e);
+      press();
     });
-    on(el, 'pointerup', () => stopRecognition(id));
-    on(el, 'pointercancel', () => stopRecognition(id));
+    on(el, 'pointerup', release);
+    on(el, 'pointercancel', release);
     on(el, 'keydown', (e) => {
       if (!isKey(e)) return;
       e.preventDefault();
-      if (!e.repeat) startUnlessDisabled();
+      if (!e.repeat) press();
     });
-    on(el, 'keyup', (e) => { if (isKey(e)) stopRecognition(id); });
+    on(el, 'keyup', (e) => {
+      if (!isKey(e)) return;
+      e.preventDefault();
+      release();
+    });
     // A long press would open the context menu on touch devices
     on(el, 'contextmenu', (e) => e.preventDefault());
+    if (mode === 'tap-or-hold') {
+      // A click without a press, e.g. from a screen reader or el.click(), toggles
+      on(el, 'click', () => {
+        if (pressed) {
+          pressed = false;
+        } else if (sessions.has(id)) {
+          stopRecognition(id);
+        } else {
+          startUnlessDisabled();
+        }
+      });
+    }
   } else {
     on(el, 'click', () => (sessions.has(id) ? stopRecognition(id) : startUnlessDisabled()));
   }
@@ -313,6 +355,51 @@ export function unbindTrigger(id) {
   }
 }
 
+/* Finishing before an action */
+
+/** key -> function removing a finishBefore() binding. */
+const finishers = new Map();
+
+/**
+ * Clicks on el while the session is active first stop the session; the click
+ * is replayed once the session has ended, so the server has the final text
+ * before the application's click handler runs.
+ */
+export function finishBefore(id, el, key) {
+  unfinishBefore(key);
+  if (!el) return;
+  const onClick = (e) => {
+    const s = sessions.get(id);
+    if (!s || e.webSpeechReplay) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    s.afterEnd.push(() => replayClick(el));
+    s.stop();
+  };
+  el.addEventListener('click', onClick, true);
+  finishers.set(key, () => el.removeEventListener('click', onClick, true));
+}
+
+export function unfinishBefore(key) {
+  const cleanup = finishers.get(key);
+  if (cleanup) {
+    finishers.delete(key);
+    cleanup();
+  }
+}
+
+function replayClick(el) {
+  const e = new MouseEvent('click', { bubbles: true, cancelable: true, composed: true });
+  e.webSpeechReplay = true;
+  el.dispatchEvent(e);
+}
+
+/** Single-line fields, where Enter submits rather than adds a line. */
+function isSingleLine(target) {
+  const input = target.inputElement || target;
+  return input.localName === 'input';
+}
+
 /* On-device recognition */
 
 function withTimeout(promise, ms, fallback) {
@@ -320,7 +407,28 @@ function withTimeout(promise, ms, fallback) {
 }
 
 function langOf(config) {
-  return config.lang || navigator.language;
+  return withRegion(config.lang || navigator.language);
+}
+
+// Regions for languages whose main region code differs from the language code
+const DEFAULT_REGIONS = {
+  en: 'US', sv: 'SE', da: 'DK', nb: 'NO', no: 'NO', nn: 'NO', ja: 'JP', ko: 'KR', zh: 'CN', cs: 'CZ',
+  el: 'GR', he: 'IL', uk: 'UA', hi: 'IN', ar: 'SA', vi: 'VN', et: 'EE', ca: 'ES', eu: 'ES', gl: 'ES',
+  sl: 'SI', sr: 'RS', fa: 'IR', ur: 'PK', ms: 'MY', sq: 'AL', kk: 'KZ', bn: 'IN', ta: 'IN', te: 'IN',
+  ga: 'IE', cy: 'GB', af: 'ZA', sw: 'KE', fil: 'PH', tl: 'PH',
+};
+
+/**
+ * Safari listens but never delivers results for a tag without a region
+ * ("en"), so add one: the user's own variant if they have one ("en-GB"),
+ * otherwise the language's main region.
+ */
+function withRegion(tag) {
+  if (!tag || tag.includes('-')) return tag;
+  const lang = tag.toLowerCase();
+  const own = (navigator.languages || []).find((l) => l.toLowerCase().startsWith(lang + '-'));
+  if (own) return own;
+  return lang + '-' + (DEFAULT_REGIONS[lang] || lang.toUpperCase());
 }
 
 /*
@@ -399,7 +507,7 @@ function start(id) {
   let errored = null;
   let ended = false;
 
-  const session = { aborted: false, stopped: false, stop() {}, abort() {} };
+  const session = { aborted: false, stopped: false, afterEnd: [], stop() {}, abort() {} };
   sessions.set(id, session);
   // The field's value as the user sees it, which the server may not have yet
   emit(target ? { type: 'starting', original } : { type: 'starting' });
@@ -442,7 +550,30 @@ function start(id) {
       }
     }
     emit({ type: 'end' });
+    if (removeEnter) removeEnter();
+    // After the end event, so the server has the final value first
+    session.afterEnd.splice(0).forEach((fn) => fn());
   };
+  // Enter in a single-line live target finishes the session first, then
+  // reaches the field's own listeners (e.g. a search on Enter)
+  let removeEnter = null;
+  if (target && isSingleLine(target)) {
+    const onEnter = (e) => {
+      if (e.key !== 'Enter' || e.webSpeechReplay || e.isComposing) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      session.afterEnd.push(() => {
+        ['keydown', 'keypress', 'keyup'].forEach((type) => {
+          const replay = new KeyboardEvent(type, { key: 'Enter', code: 'Enter', keyCode: 13, which: 13, bubbles: true, cancelable: true, composed: true });
+          replay.webSpeechReplay = true;
+          (target.inputElement || target).dispatchEvent(replay);
+        });
+      });
+      session.stop();
+    };
+    target.addEventListener('keydown', onEnter, true);
+    removeEnter = () => target.removeEventListener('keydown', onEnter, true);
+  }
   const phase = (name) => { if (config.phaseEvents) emit({ type: 'phase', phase: name }); };
   const ctx = { id, host, config, session, emit, results, error, end, phase };
 

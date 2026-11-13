@@ -34,10 +34,11 @@ TextArea notes = new TextArea("Notes");
 add(notes, new DictationButton(notes), new ReadAloudButton(notes));
 ```
 
-`DictationButton` toggles between *Dictate* and *Stop dictation*, and Escape
-cancels and restores the field. The browser starts listening right in the
-click handler and writes the text into the field while the user speaks; only
-final results go to the server. For push-to-talk in a field's suffix:
+Tap `DictationButton` to start and tap again to stop, or hold it down while
+speaking and release to stop (`TriggerMode.TAP_OR_HOLD`). Escape cancels and
+restores the field. The browser starts listening right in the press handler
+and writes the text into the field while the user speaks; only final results
+go to the server. For push-to-talk only, in a field's suffix:
 
 ```java
 TextField field = new TextField();
@@ -51,8 +52,23 @@ field.setSuffixComponent(new DictationButton(field) {{
 }});
 ```
 
-The button listens until it is clicked again, which suits dictating longer
-text. For a single request, such as a search box or a command, let a pause end
+After a tap, the button listens until tapped again, which suits dictating
+longer text.
+
+The server gets the dictated text when the session ends, so a button that acts
+on the field's value should finish the session first. `finishBefore` stops the
+session on a click and replays the click once the server has the text. Enter
+in a single-line field does the same automatically:
+
+```java
+TextField query = new TextField();
+DictationButton mic = new DictationButton(query);
+Button search = new Button("Search", e -> search(query.getValue()));
+mic.getRecognition().finishBefore(search);
+query.addKeyDownListener(Key.ENTER, e -> search(query.getValue()));
+```
+
+For a single request, such as a search box or a command, let a pause end
 the session and act on the text in an end listener. The field already has its
 final value there:
 
@@ -157,6 +173,7 @@ trigger. `DictationButton` uses exactly this.
 ```java
 RecognitionOptions.builder()
         .engine(RecognitionEngine.PREFER_ON_DEVICE)  // see "Where speech is processed"
+        .lang(Locale.ENGLISH)                        // a region is added in the browser ("en-US"), Safari needs one
         .phrases(List.of("Vaadin", "SKU-1234"))      // contextual biasing: on the device and the server fallback
         .cancelSpeechOnStart(true)                   // stop reading aloud when the user starts talking
         .build();

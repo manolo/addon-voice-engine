@@ -177,6 +177,12 @@ public final class RecognitionOptions implements Serializable {
         }
 
         /**
+         * A language without a region, e.g. {@code Locale.ENGLISH}, gets one
+         * in the browser: the user's own variant if their browser languages
+         * have one (e.g. {@code en-GB}), otherwise the language's main region
+         * ({@code en-US}). Safari would otherwise listen but never deliver a
+         * result.
+         *
          * @param lang the language to recognize, or {@code null} for the
          *             browser's language
          * @return this builder

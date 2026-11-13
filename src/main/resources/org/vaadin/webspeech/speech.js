@@ -174,7 +174,7 @@ const keyTriggers = new Map();
  * Stores the configuration of a session. Config: lang, continuous,
  * interimResults, maxAlternatives, engine (any|prefer-on-device|on-device-only|
  * on-device-or-server|server),
- * phrases, cancelSpeech, interimToServer, phaseEvents, serverFallback,
+ * phrases, cancelSpeech, interimToServer, phaseEvents, serverFallback, recordingFormat,
  * liveAppend. target: optional element whose value is updated live.
  */
 export function configure(host, id, config, target) {
@@ -705,6 +705,102 @@ async function startBrowser(ctx) {
   }
 }
 
+/** Records with MediaRecorder in the browser's own compressed format. */
+function mediaRecorder(stream) {
+  const recorder = new MediaRecorder(stream);
+  const chunks = [];
+  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  recorder.start();
+  return {
+    stop: () => new Promise((resolve) => {
+      recorder.onstop = () => resolve(new Blob(chunks, { type: recorder.mimeType || 'application/octet-stream' }));
+      if (recorder.state !== 'inactive') recorder.stop(); else recorder.onstop();
+    })
+  };
+}
+
+const WAV_RATE = 16000;
+const CAPTURE_PROCESSOR = `
+registerProcessor('web-speech-capture', class extends AudioWorkletProcessor {
+  process(inputs) {
+    const channel = inputs[0] && inputs[0][0];
+    if (channel) this.port.postMessage(channel.slice(0));
+    return true;
+  }
+});`;
+
+/** Records 16 kHz mono 16-bit PCM WAV, which speech models take as is. */
+async function wavRecorder(stream) {
+  const context = new AudioContext();
+  try {
+    const moduleUrl = URL.createObjectURL(new Blob([CAPTURE_PROCESSOR], { type: 'text/javascript' }));
+    try {
+      await context.audioWorklet.addModule(moduleUrl);
+    } finally {
+      URL.revokeObjectURL(moduleUrl);
+    }
+    const source = context.createMediaStreamSource(stream);
+    const capture = new AudioWorkletNode(context, 'web-speech-capture');
+    const chunks = [];
+    capture.port.onmessage = (e) => chunks.push(e.data);
+    source.connect(capture);
+    return {
+      stop: async () => {
+        source.disconnect();
+        capture.port.onmessage = null;
+        const rate = context.sampleRate;
+        await context.close();
+        return encodeWav(downsample(chunks, rate, WAV_RATE), WAV_RATE);
+      }
+    };
+  } catch (e) {
+    context.close();
+    throw e;
+  }
+}
+
+/** Joins the captured chunks and averages them down to the target rate. */
+function downsample(chunks, inRate, outRate) {
+  const length = chunks.reduce((n, c) => n + c.length, 0);
+  const input = new Float32Array(length);
+  let offset = 0;
+  chunks.forEach((c) => { input.set(c, offset); offset += c.length; });
+  if (inRate <= outRate) return input;
+  const ratio = inRate / outRate;
+  const output = new Float32Array(Math.floor(length / ratio));
+  for (let i = 0; i < output.length; i++) {
+    const from = Math.floor(i * ratio);
+    const to = Math.min(length, Math.floor((i + 1) * ratio));
+    let sum = 0;
+    for (let j = from; j < to; j++) sum += input[j];
+    output[i] = to > from ? sum / (to - from) : 0;
+  }
+  return output;
+}
+
+function encodeWav(samples, rate) {
+  const view = new DataView(new ArrayBuffer(44 + samples.length * 2));
+  const text = (at, s) => { for (let i = 0; i < s.length; i++) view.setUint8(at + i, s.charCodeAt(i)); };
+  text(0, 'RIFF');
+  view.setUint32(4, 36 + samples.length * 2, true);
+  text(8, 'WAVE');
+  text(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);        // PCM
+  view.setUint16(22, 1, true);        // mono
+  view.setUint32(24, rate, true);
+  view.setUint32(28, rate * 2, true); // bytes per second
+  view.setUint16(32, 2, true);        // bytes per frame
+  view.setUint16(34, 16, true);       // bits per sample
+  text(36, 'data');
+  view.setUint32(40, samples.length * 2, true);
+  for (let i = 0; i < samples.length; i++) {
+    const v = Math.max(-1, Math.min(1, samples[i]));
+    view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+  }
+  return new Blob([view], { type: 'audio/wav' });
+}
+
 /**
  * Server fallback: records audio with MediaRecorder and uploads it to the
  * server, which transcribes it. Used when the browser cannot recognize speech.
@@ -733,10 +829,17 @@ async function startRecorder(ctx) {
     end();
     return;
   }
-  const recorder = new MediaRecorder(stream);
-  const chunks = [];
-  recorder.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-  recorder.onstop = async () => {
+  let recorder;
+  try {
+    recorder = ctx.config.recordingFormat === 'wav' ? await wavRecorder(stream) : mediaRecorder(stream);
+  } catch (e) {
+    release();
+    error('audio-capture', String(e && e.message));
+    end();
+    return;
+  }
+  const finish = async () => {
+    const blob = await recorder.stop();
     release();
     phase('audioend');
     if (session.aborted) {
@@ -745,7 +848,6 @@ async function startRecorder(ctx) {
       return;
     }
     try {
-      const blob = new Blob(chunks, { type: recorder.mimeType || 'application/octet-stream' });
       const url = new URL(host.getAttribute(UPLOAD_ATTRIBUTE), document.baseURI);
       url.searchParams.set('session', id);
       url.searchParams.set('lang', langOf(ctx.config));
@@ -761,10 +863,18 @@ async function startRecorder(ctx) {
     }
     end();
   };
-  const finish = () => { if (recorder.state !== 'inactive') recorder.stop(); };
-  session.stop = () => { session.stopped = true; finish(); };
-  session.abort = () => { session.aborted = true; finish(); };
-  recorder.start();
+  if (session.aborted || session.stopped) {
+    // Stopped while the recorder was being set up: nothing worth sending
+    await recorder.stop();
+    release();
+    if (session.aborted) error('aborted');
+    end();
+    return;
+  }
+  let finishing = false;
+  const once = () => { if (!finishing) { finishing = true; finish(); } };
+  session.stop = () => { session.stopped = true; once(); };
+  session.abort = () => { session.aborted = true; once(); };
   emit({ type: 'start', processLocally: false, server: true });
   phase('audiostart');
 }

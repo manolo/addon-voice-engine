@@ -214,6 +214,18 @@ recognition.setServerFallback(recording -> transcriptionModel.transcribe(
         }));
 ```
 
+By default, the browser records in its own compressed format: WebM/Opus in
+Chrome and Firefox, MP4/AAC in Safari. Speech models that run in your own JVM,
+such as Parakeet with [Quixotic](https://qxotic.ai), or a local Whisper, take
+WAV without an extra decoder like ffmpeg. `RecordingFormat.WAV` records 16 kHz
+mono 16-bit PCM in every browser:
+
+```java
+recognition.setServerFallback(
+        recording -> parakeet.transcribe(recording.audio().readAllBytes()).text(),
+        RecordingFormat.WAV);
+```
+
 The recording is uploaded when the session is stopped, and the text arrives as
 a single final result. The transcriber runs in the upload request without the
 session lock, so it can take its time but must not touch components.

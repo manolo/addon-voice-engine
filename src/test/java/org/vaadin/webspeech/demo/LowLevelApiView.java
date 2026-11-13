@@ -5,8 +5,10 @@ import java.util.Locale;
 import org.vaadin.webspeech.OnDeviceAvailability;
 import org.vaadin.webspeech.RecognitionEngine;
 import org.vaadin.webspeech.RecognitionOptions;
+import org.vaadin.webspeech.RecordingFormat;
 import org.vaadin.webspeech.SpeechRecognition;
 import org.vaadin.webspeech.SpeechSynthesis;
+import org.vaadin.webspeech.SpeechToText;
 import org.vaadin.webspeech.SynthesisState;
 import org.vaadin.webspeech.Utterance;
 import org.vaadin.webspeech.ui.LanguageSelect;
@@ -56,6 +58,7 @@ public class LowLevelApiView extends VerticalLayout {
     private final VoiceSelect voiceSelect = new VoiceSelect();
     private final Checkbox continuous = new Checkbox("Continuous");
     private final Checkbox interim = new Checkbox("Interim results", true);
+    private final Checkbox wav = new Checkbox("Record WAV");
     private final Select<RecognitionEngine> engine = new Select<>("Engine", e -> {
     }, RecognitionEngine.values()) {{
         setValue(RecognitionEngine.ANY);
@@ -79,7 +82,7 @@ public class LowLevelApiView extends VerticalLayout {
     public LowLevelApiView() {
         add(new Paragraph("SpeechRecognition and SpeechSynthesis used directly. "
                 + "Button states follow the listeners, the log shows the raw events."));
-        add(new HorizontalLayout(languageSelect, voiceSelect, engine, continuous, interim) {{
+        add(new HorizontalLayout(languageSelect, voiceSelect, engine, continuous, interim, wav) {{
             setWrap(true);
             setAlignItems(FlexComponent.Alignment.BASELINE);
         }});
@@ -107,9 +110,12 @@ public class LowLevelApiView extends VerticalLayout {
         recognition.addPhaseListener(phase -> log("recognition phase: " + phase));
         // Used in browsers without speech recognition (Firefox for Android). A real
         // application would call a transcription service here.
-        recognition.setServerFallback(recording -> "server fallback received "
+        SpeechToText fallback = recording -> "server fallback received "
                 + recording.audio().readAllBytes().length + " bytes of " + recording.contentType() + " as "
-                + recording.fileName() + " in " + recording.lang());
+                + recording.fileName() + " in " + recording.lang();
+        recognition.setServerFallback(fallback);
+        wav.addValueChangeListener(e -> recognition.setServerFallback(fallback,
+                e.getValue() ? RecordingFormat.WAV : RecordingFormat.BROWSER));
         recognition.addEndListener(transcript -> {
             log("recognition end: \"" + transcript + "\"");
             text.setValue(transcript);

@@ -421,6 +421,22 @@ class DemoViewsIT {
     }
 
     @Test
+    void lowLevelApi_serverFallbackRecordsWav() {
+        page.addInitScript(NO_RECOGNITION);
+        page.navigate(BASE + "low-level");
+        assertThat(log()).containsText("recognition=UNSUPPORTED");
+        page.getByText("Record WAV").click();
+        button("Record").click();
+        assertThat(log()).containsText("recognition active: true");
+        page.waitForTimeout(1500);
+        button("Stop").click();
+        // 16 kHz mono 16-bit: about 32 000 bytes per second
+        assertThat(log()).containsText(Pattern.compile(
+                "result #0 final: server fallback received [3-9]\\d{4} bytes of audio/wav as recording\\.wav"));
+        assertThat(log()).containsText("recognition end");
+    }
+
+    @Test
     void lowLevelApi_onDeviceCheckDoesNotCrashAutomatedBrowser() {
         // available() crashes the tab in Playwright's Chromium, so the add-on
         // reports UNAVAILABLE in automated browsers without calling it

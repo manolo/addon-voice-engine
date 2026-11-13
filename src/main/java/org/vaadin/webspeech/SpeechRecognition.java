@@ -86,6 +86,7 @@ public class SpeechRecognition implements Serializable {
     private String liveBase = "";
     private boolean interimResultsToServer = true;
     private SpeechToText serverFallback;
+    private RecordingFormat recordingFormat = RecordingFormat.BROWSER;
 
     /**
      * Creates a recognition session with {@link RecognitionOptions#DEFAULT}.
@@ -513,6 +514,21 @@ public class SpeechRecognition implements Serializable {
      *                    already recording still uses it
      */
     public void setServerFallback(SpeechToText transcriber) {
+        setServerFallback(transcriber, RecordingFormat.BROWSER);
+    }
+
+    /**
+     * Like {@link #setServerFallback(SpeechToText)}, recording in the given
+     * format. Use {@link RecordingFormat#WAV} for a speech model that runs in
+     * your server, e.g. Whisper or Parakeet, which takes WAV without an extra
+     * decoder.
+     *
+     * @param transcriber transcribes the recording, or {@code null} to remove
+     *                    the fallback
+     * @param format      how the browser records the audio
+     */
+    public void setServerFallback(SpeechToText transcriber, RecordingFormat format) {
+        recordingFormat = Objects.requireNonNull(format, "format");
         serverFallback = transcriber;
         if (transcriberRegistration != null) {
             transcriberRegistration.remove();
@@ -529,6 +545,13 @@ public class SpeechRecognition implements Serializable {
      */
     public SpeechToText getServerFallback() {
         return serverFallback;
+    }
+
+    /**
+     * @return how the browser records audio for the server fallback
+     */
+    public RecordingFormat getRecordingFormat() {
+        return recordingFormat;
     }
 
     /**
@@ -700,6 +723,7 @@ public class SpeechRecognition implements Serializable {
         config.put("interimToServer", interimResultsToServer);
         config.put("phaseEvents", !phaseListeners.isEmpty());
         config.put("serverFallback", serverFallback != null);
+        config.put("recordingFormat", recordingFormat.jsName());
         config.put("liveAppend", liveAppend);
         return config;
     }

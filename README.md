@@ -1,18 +1,31 @@
-# Voice Engine Add-on for Vaadin
+# WebSpeech for Vaadin
 
 Speech recognition (speech-to-text) and speech synthesis (text-to-speech) for
 Vaadin Flow, using the browser's
 [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API).
 
 - A typed Java API that mirrors the browser API:
-  [`SpeechRecognition`](src/main/java/org/vaadin/voiceengine/SpeechRecognition.java) and
-  [`SpeechSynthesis`](src/main/java/org/vaadin/voiceengine/SpeechSynthesis.java).
+  [`SpeechRecognition`](src/main/java/org/vaadin/webspeech/SpeechRecognition.java) and
+  [`SpeechSynthesis`](src/main/java/org/vaadin/webspeech/SpeechSynthesis.java).
 - Ready-made components for the common cases: `DictationButton`,
   `ReadAloudButton`, `LanguageSelect` and `VoiceSelect`.
 - No frontend build impact: the add-on has no `@JsModule` or npm dependency,
   so adding it does not require a custom frontend bundle.
 
 Requires Vaadin 25.
+
+```xml
+<dependency>
+    <groupId>org.parttio</groupId>
+    <artifactId>web-speech</artifactId>
+    <version>3.0.0</version>
+</dependency>
+```
+
+WebSpeech continues the [Voice Engine add-on](https://vaadin.com/directory/component/voice-engine)
+by Manolo Carrasco Moñino (`org.vaadin.addons.manolo:voice-engine`, versions
+1.x and 2.x). Version 3.0 was renamed when its API was rewritten, see
+[Migrating from Voice Engine](#migrating-from-voice-engine-1x2x).
 
 ## Dictate into a field, read text aloud
 
@@ -213,10 +226,30 @@ the UI element and routed to the right Java listeners. This keeps the add-on
 free of frontend build dependencies and works the same in every deployment,
 including with `@PreserveOnRefresh` and while a modal dialog is open.
 
-## Migrating from 1.x/2.x
+### A candidate for Vaadin Flow
 
-3.0 replaces the `VoiceEngine` component with the API above. Typical
-replacements:
+The add-on is deliberately built like the modern browser API wrappers that
+have recently been added to Vaadin Flow itself, so that it can later be moved
+into Flow, or serve as the basis for such an API:
+
+- The Java API follows the browser API's names and concepts
+  (`SpeechRecognition`, `SpeechSynthesis`, `Utterance`) with typed options,
+  results and error codes instead of strings.
+- It only depends on Flow's public API (`Element.executeJs`, element event
+  listeners, `DownloadHandler`, `ElementRequestHandler`), with no web
+  component, npm package or frontend build step.
+- State is per UI and tied to component attach and detach, so nothing leaks
+  between views or sessions.
+- `SimulatedSpeech` gives a browserless testing story out of the box.
+
+The ready-made components in `org.vaadin.webspeech.ui` are a separate layer on
+top of that API and could stay in an add-on.
+
+## Migrating from Voice Engine 1.x/2.x
+
+Replace the `org.vaadin.addons.manolo:voice-engine` dependency with
+`org.parttio:web-speech`; the Java package is now `org.vaadin.webspeech`. The
+`VoiceEngine` component is replaced by the API above. Typical replacements:
 
 | 1.x/2.x `VoiceEngine`                           | 3.0                                                         |
 |-------------------------------------------------|-------------------------------------------------------------|
@@ -230,7 +263,7 @@ replacements:
 | `setContinuous(true)`                           | `RecognitionOptions.continuous(true)`                       |
 
 If you want to keep the old toolbar, the test sources contain
-[`LegacyVoiceEngine`](src/test/java/org/vaadin/addons/voiceengine/LegacyVoiceEngine.java),
+[`LegacyVoiceEngine`](src/test/java/org/vaadin/webspeech/demo/LegacyVoiceEngine.java),
 a replica of the 1.x/2.x component built on the 3.0 API, which you can copy into
 your project.
 

@@ -8,6 +8,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -205,9 +206,13 @@ final class SpeechClient implements Serializable {
             }
             String contentType = request.getContentType() != null ? request.getContentType()
                     : "application/octet-stream";
+            String lang = request.getParameter("lang");
+            String[] phrases = request.getParameterMap().get("phrase");
             String transcript;
             try (InputStream audio = new LimitedInputStream(request.getInputStream(), MAX_UPLOAD_BYTES)) {
-                transcript = transcriber.transcribe(audio, contentType);
+                transcript = transcriber.transcribe(new Recording(audio, contentType,
+                        lang == null || lang.isBlank() ? null : Locale.forLanguageTag(lang),
+                        phrases == null ? List.of() : List.of(phrases)));
             } catch (IOException | RuntimeException e) {
                 LoggerFactory.getLogger(SpeechClient.class).warn("Transcription failed", e);
                 response.sendError(500, "Transcription failed");

@@ -314,7 +314,7 @@ class DemoViewsIT {
         assertThat(log()).containsText("recognition active: true");
         page.waitForTimeout(1500);
         button("Stop").click();
-        assertThat(log()).containsText(Pattern.compile("result #0 final: server fallback received \\d+ bytes of audio/"));
+        assertThat(log()).containsText(Pattern.compile("result #0 final: server fallback received \\d+ bytes of audio/\\S+ as recording\\.\\w+ in \\w+"));
         assertThat(log()).containsText("recognition end");
     }
 
@@ -333,9 +333,31 @@ class DemoViewsIT {
         assertThat(log()).containsText("recognition end");
     }
 
+    @Test
+    void lowLevelApi_serverEnginesSkipBrowserRecognition() {
+        // The browser could recognize, but these engines never use its cloud
+        // service: no on-device recognition in an automated browser, so both
+        // go to the server fallback
+        page.addInitScript(FAKE_SPEECH);
+        page.navigate(BASE + "low-level");
+        assertThat(log()).containsText("recognition=SUPPORTED");
+        List<String> engines = List.of("ON_DEVICE_OR_SERVER", "SERVER");
+        for (int i = 1; i <= engines.size(); i++) {
+            engineSelect(engines.get(i - 1));
+            button("Record").click();
+            assertThat(log()).containsText(Pattern.compile("(recognition active: true[\\s\\S]*){" + i + "}"));
+            page.waitForTimeout(1000);
+            button("Stop").click();
+            assertThat(log()).containsText(
+                    Pattern.compile("(result #0 final: server fallback received \\d+ bytes[\\s\\S]*){" + i + "}"));
+            assertThat(log()).containsText(Pattern.compile("(recognition end[\\s\\S]*){" + i + "}"));
+        }
+        assertEquals(Boolean.FALSE, page.evaluate("() => !!window.fakeRecognition"));
+    }
+
     private void engineSelect(String value) {
         page.locator("vaadin-select").filter(new Locator.FilterOptions().setHasText("Engine")).click();
-        page.getByRole(AriaRole.OPTION, new Page.GetByRoleOptions().setName(value)).click();
+        page.getByRole(AriaRole.OPTION, new Page.GetByRoleOptions().setName(value).setExact(true)).click();
     }
 
     @Test

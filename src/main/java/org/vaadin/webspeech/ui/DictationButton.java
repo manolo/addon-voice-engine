@@ -30,6 +30,9 @@ import com.vaadin.flow.component.icon.VaadinIcon;
  * add(notes, new DictationButton(notes));
  * }</pre>
  * <p>
+ * The button keeps listening until clicked again; for a single request (a
+ * search box, a command), use {@link #setContinuous(boolean) setContinuous(false)}.
+ * <p>
  * The browser starts listening directly when the button is pressed, without a
  * server round trip. With {@link #setTriggerMode(TriggerMode) TriggerMode.HOLD},
  * it works as push-to-talk. For more control, use {@link #getRecognition()},
@@ -144,6 +147,27 @@ public class DictationButton extends Button {
      */
     public void setLang(Locale lang) {
         recognition.setOptions(recognition.getOptions().toBuilder().lang(lang).build());
+    }
+
+    /**
+     * By default the button keeps listening until it is clicked again, for
+     * dictating longer text. For a single request, e.g. in a search box or a
+     * command field, use {@code false}: the session ends when the user pauses,
+     * and an {@link SpeechRecognition#addEndListener end listener} can act on
+     * the text.
+     *
+     * <pre>{@code
+     * DictationButton mic = new DictationButton(search);
+     * mic.setContinuous(false);
+     * mic.getRecognition().addEndListener(text -> runSearch(search.getValue()));
+     * }</pre>
+     *
+     * @param continuous {@code true} (default) to listen until stopped,
+     *                   {@code false} to stop after the first phrase. Takes
+     *                   effect on the next start.
+     */
+    public void setContinuous(boolean continuous) {
+        recognition.setOptions(recognition.getOptions().toBuilder().continuous(continuous).build());
     }
 
     /**

@@ -170,7 +170,8 @@ const triggers = new Map();
 
 /**
  * Stores the configuration of a session. Config: lang, continuous,
- * interimResults, maxAlternatives, engine (any|prefer-on-device|on-device-only),
+ * interimResults, maxAlternatives, engine (any|prefer-on-device|on-device-only|
+ * on-device-or-server|server),
  * phrases, cancelSpeech, interimToServer, phaseEvents, serverFallback,
  * liveAppend. target: optional element whose value is updated live.
  */
@@ -387,7 +388,14 @@ function start(id) {
   const phase = (name) => { if (config.phaseEvents) emit({ type: 'phase', phase: name }); };
   const ctx = { id, host, config, session, emit, results, error, end, phase };
 
-  if (SpeechRecognitionImpl) {
+  if (config.engine === 'server') {
+    if (config.serverFallback) {
+      startRecorder(ctx);
+    } else {
+      error('recognition-unavailable', 'No server fallback is set');
+      end();
+    }
+  } else if (SpeechRecognitionImpl) {
     startBrowser(ctx);
   } else if (config.serverFallback) {
     startRecorder(ctx);
@@ -418,7 +426,22 @@ async function startBrowser(ctx) {
 
   const lang = langOf(config);
   let processLocally = false;
-  if (config.engine === 'on-device-only') {
+  if (config.engine === 'on-device-or-server' && config.serverFallback) {
+    // On the device if the language pack is there, otherwise the server,
+    // never the browser's cloud service
+    const availability = supportsProcessLocally() ? await onDeviceAvailability(lang) : 'unavailable';
+    if (availability === 'downloadable') installOnDevice(lang);
+    if (session.aborted || session.stopped) {
+      if (session.aborted) error('aborted');
+      end();
+      return;
+    }
+    if (availability !== 'available') {
+      startRecorder(ctx);
+      return;
+    }
+    processLocally = true;
+  } else if (config.engine === 'on-device-only' || config.engine === 'on-device-or-server') {
     if (!supportsProcessLocally()) {
       error('on-device-unavailable', 'This browser cannot recognize speech on the device');
       end();
@@ -465,7 +488,10 @@ async function startBrowser(ctx) {
     results(list);
   };
   recognition.onerror = (e) => {
-    if (config.serverFallback && !gotResult && !session.aborted && FALLBACK_ERRORS.has(e.error)) {
+    // Language pack missing after all: never fall back to the cloud, but to the server
+    const localFailed = processLocally && (e.error === 'service-not-allowed' || e.error === 'language-not-supported');
+    const toServer = config.engine === 'on-device-or-server' ? localFailed : FALLBACK_ERRORS.has(e.error);
+    if (config.serverFallback && !gotResult && !session.aborted && toServer) {
       fallback = true;
       return;
     }
@@ -531,6 +557,8 @@ async function startRecorder(ctx) {
       const blob = new Blob(chunks, { type: recorder.mimeType || 'application/octet-stream' });
       const url = new URL(host.getAttribute(UPLOAD_ATTRIBUTE), document.baseURI);
       url.searchParams.set('session', id);
+      url.searchParams.set('lang', langOf(ctx.config));
+      (ctx.config.phrases || []).forEach((p) => url.searchParams.append('phrase', p));
       const response = await fetch(url, { method: 'POST', body: blob, headers: { 'Content-Type': blob.type } });
       if (!response.ok) throw new Error('HTTP ' + response.status);
       const transcript = ((await response.json()).transcript || '').trim();

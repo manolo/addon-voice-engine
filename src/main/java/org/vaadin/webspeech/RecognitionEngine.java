@@ -31,7 +31,25 @@ public enum RecognitionEngine {
      * not installed, see
      * {@link SpeechRecognition#checkOnDeviceAvailability(java.util.Locale, com.vaadin.flow.function.SerializableConsumer)}.
      */
-    ON_DEVICE_ONLY("on-device-only");
+    ON_DEVICE_ONLY("on-device-only"),
+    /**
+     * On the device if the language pack is installed, otherwise the
+     * {@link SpeechRecognition#setServerFallback(SpeechToText) server
+     * fallback}: the audio goes to your server or stays on the device, never
+     * to the browser vendor's cloud service. Also uses the server in browsers
+     * without speech recognition, e.g. Firefox. If the pack can be downloaded,
+     * the download is started for the next time. Without a server fallback,
+     * works like {@link #ON_DEVICE_ONLY}.
+     */
+    ON_DEVICE_OR_SERVER("on-device-or-server"),
+    /**
+     * Always records the audio and sends it to the
+     * {@link SpeechRecognition#setServerFallback(SpeechToText) server
+     * fallback}, also in browsers that could recognize speech themselves.
+     * Fails with {@link RecognitionErrorCode#RECOGNITION_UNAVAILABLE} without
+     * a server fallback or if the browser cannot record.
+     */
+    SERVER("server");
 
     private final String jsName;
 

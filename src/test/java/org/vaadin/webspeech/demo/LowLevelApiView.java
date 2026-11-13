@@ -107,8 +107,9 @@ public class LowLevelApiView extends VerticalLayout {
         recognition.addPhaseListener(phase -> log("recognition phase: " + phase));
         // Used in browsers without speech recognition (Firefox). A real
         // application would call a transcription service here.
-        recognition.setServerFallback((audio, contentType) -> "server fallback received "
-                + audio.readAllBytes().length + " bytes of " + contentType);
+        recognition.setServerFallback(recording -> "server fallback received "
+                + recording.audio().readAllBytes().length + " bytes of " + recording.contentType() + " as "
+                + recording.fileName() + " in " + recording.lang());
         recognition.addEndListener(transcript -> {
             log("recognition end: \"" + transcript + "\"");
             text.setValue(transcript);

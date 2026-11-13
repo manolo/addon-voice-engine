@@ -1,7 +1,6 @@
 package org.vaadin.webspeech;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Serializable;
 
 /**
@@ -13,22 +12,23 @@ import java.io.Serializable;
  * it may take its time, but must not touch UI components.
  *
  * <pre>{@code
- * // e.g. with Spring AI
- * recognition.setServerFallback((audio, contentType) ->
- *         transcriptionModel.transcribe(new InputStreamResource(audio)));
+ * // e.g. with Spring AI and OpenAI, which needs a file name with an extension
+ * recognition.setServerFallback(recording -> transcriptionModel.transcribe(
+ *         new InputStreamResource(recording.audio()) {
+ *             public String getFilename() {
+ *                 return recording.fileName();
+ *             }
+ *         }));
  * }</pre>
  */
 @FunctionalInterface
 public interface SpeechToText extends Serializable {
 
     /**
-     * @param audio       the recording, as recorded by the browser's
-     *                    {@code MediaRecorder}
-     * @param contentType the recording's media type, e.g.
-     *                    {@code audio/webm;codecs=opus} or {@code audio/mp4}
+     * @param recording the recorded audio, its type and language
      * @return the recognized text, empty if nothing was recognized
      * @throws IOException if transcription fails, reported to the session as
      *                     {@link RecognitionErrorCode#TRANSCRIPTION_FAILED}
      */
-    String transcribe(InputStream audio, String contentType) throws IOException;
+    String transcribe(Recording recording) throws IOException;
 }

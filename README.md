@@ -50,6 +50,18 @@ field.setSuffixComponent(new DictationButton(field) {{
 }});
 ```
 
+The button listens until it is clicked again, which suits dictating longer
+text. For a single request, such as a search box or a command, let a pause end
+the session and act on the text in an end listener. The field already has its
+final value there:
+
+```java
+TextField goal = new TextField();
+DictationButton mic = new DictationButton(goal);
+mic.setContinuous(false);   // stop after the first phrase
+mic.getRecognition().addEndListener(text -> runGoal(goal.getValue()));
+```
+
 To pick the language and voice:
 
 ```java
@@ -161,12 +173,29 @@ no service behind it. For those, the session can record the audio and let your
 server transcribe it, with e.g. Spring AI, OpenAI, Azure or a local Whisper:
 
 ```java
-recognition.setServerFallback((audio, contentType) -> transcriber.transcribe(audio, contentType));
+recognition.setServerFallback(recording -> transcriber.transcribe(recording.audio(), recording.lang()));
+```
+
+The `Recording` has the audio, its content type, the language and the
+session's `phrases`, plus a `fileName()` with an extension matching the
+format, which e.g. OpenAI's API needs. With Spring AI:
+
+```java
+recognition.setServerFallback(recording -> transcriptionModel.transcribe(
+        new InputStreamResource(recording.audio()) {
+            @Override
+            public String getFilename() {
+                return recording.fileName();
+            }
+        }));
 ```
 
 The recording is uploaded when the session is stopped, and the text arrives as
 a single final result. The transcriber runs in the upload request without the
 session lock, so it can take its time but must not touch components.
+
+The fallback is used when the browser cannot recognize speech. To decide
+yourself where speech goes, see [Where speech is processed](#where-speech-is-processed).
 
 ## Browser support
 
@@ -189,8 +218,13 @@ also recognize on the device, which keeps the audio private and works offline:
 - `RecognitionEngine.ON_DEVICE_ONLY`: never leaves the device; fails if the
   language pack is not installed.
 - `RecognitionEngine.PREFER_ON_DEVICE`: on the device when the language pack is
-  installed, otherwise the browser's default. A downloadable pack is
-  downloaded for the next time.
+  installed, otherwise the browser's default (the vendor's cloud). A
+  downloadable pack is downloaded for the next time.
+- `RecognitionEngine.ON_DEVICE_OR_SERVER`: on the device when the language pack
+  is installed, otherwise your [server fallback](#server-fallback), never the
+  vendor's cloud. Also covers Firefox. A downloadable pack is downloaded for
+  the next time.
+- `RecognitionEngine.SERVER`: always your server fallback.
 - `SpeechRecognition.checkOnDeviceAvailability(lang, callback)` and
   `installOnDevice(lang, callback)` for building your own flow.
 
@@ -216,6 +250,13 @@ assertEquals("hello world", textArea.getValue());
 assertEquals("Done.", SimulatedSpeech.getQueuedUtterances(ui).get(0).text());
 SimulatedSpeech.finishUtterance(ui);
 ```
+
+For end-to-end tests in a headless browser (e.g. Playwright), replace
+`window.SpeechRecognition` with a fake in an init script; the add-on only uses
+the standard API. The fake must call `onend` when stopped, and also on its own
+after a final result when `continuous` is false, as the browser does. See
+`FAKE_SPEECH` in
+[`DemoViewsIT`](src/test/java/org/vaadin/webspeech/demo/DemoViewsIT.java).
 
 ## How it works
 

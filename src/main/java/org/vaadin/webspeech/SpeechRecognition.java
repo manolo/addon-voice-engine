@@ -500,7 +500,9 @@ public class SpeechRecognition implements Serializable {
 
     /**
      * Listens to the end of a session, whether stopped, ended on its own or
-     * failed.
+     * failed. A {@link #setLiveTarget(HasValue) live target} already has its
+     * final value on the server when the listeners run, so they can read it
+     * from the field.
      *
      * @param listener receives the final transcript, see
      *                 {@link #getTranscript()}

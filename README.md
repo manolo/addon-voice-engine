@@ -342,3 +342,16 @@ mvn verify -Pit    # integration tests with Playwright (headless Chromium)
 
 The demo views are in `src/test/java`: typical use with the ready-made
 components, the low-level API, and the 1.x/2.x toolbar replica.
+
+### Releasing
+
+On an up-to-date `main` with no local changes:
+
+```
+mvn release:prepare   # asks the versions, tags vX.Y.Z and pushes
+mvn release:clean
+```
+
+The pushed tag starts `.github/workflows/release-build.yml`, which publishes
+the release to Maven Central. The release plugin pushes over SSH (see
+`developerConnection` in `pom.xml`), so you need SSH access to GitHub.
